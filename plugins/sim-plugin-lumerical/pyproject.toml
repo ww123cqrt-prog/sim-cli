@@ -9,7 +9,7 @@ description = "Lumerical FDTD/RCWA driver for sim-cli via remote HTTP server"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "cq" }]
+authors = [{ name = "ww123cqrt-prog" }]
 keywords = ["lumerical", "fdtd", "rcwa", "simulation", "sim-cli", "plugin"]
 classifiers = [
     "Development Status :: 3 - Alpha",

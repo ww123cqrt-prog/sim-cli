@@ -9,7 +9,7 @@ description = "CMD/Shell command execution plugin for sim-cli with security feat
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "cq" }]
+authors = [{ name = "ww123cqrt-prog" }]
 keywords = ["cmd", "shell", "command", "sim-cli", "plugin", "security"]
 classifiers = [
     "Development Status :: 3 - Alpha",

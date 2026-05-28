@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>构建虚拟局域网+Agent+远程调用+仿真工作流 v3</title>
+    <title>构建虚拟局域网+Agent+远程调用+仿真工作流 v4</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
@@ -654,7 +654,7 @@
                     </div>
                     <div class="meta-item">
                         <div class="meta-dot"></div>
-                        <span>Lumerical v241</span>
+                        <span>Lumerical v252</span>
                     </div>
                     <div class="meta-item">
                         <div class="meta-dot"></div>
@@ -741,7 +741,7 @@
 │          ▼                        ▼                        ▼                    │
 │   ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐      │
 │   │ comsolmphserver     │ │ Lumerical FDTD      │ │ cmd/bash/powershell │      │
-│   │ (端口 2036)         │ │ v241                │ │ 任意命令执行        │      │
+│   │ (端口 2036)         │ │ v252                │ │ 任意命令执行        │      │
 │   └─────────────────────┘ └─────────────────────┘ └─────────────────────┘      │
 └─────────────────────────────────────────────────────────────────────────────────┘</div>
             <div class="slide-number">3 / 18</div>
@@ -1233,7 +1233,7 @@ curl -X POST http://<span class="number">100.65.228.190</span>:<span class="numb
 │                                                   │                             │
 │                                                   ▼                             │
 │                                        ┌─────────────────────────────┐          │
-│                                        │ Lumerical FDTD v241         │          │
+│                                        │ Lumerical FDTD v252         │          │
 │                                        │                             │          │
 │                                        │ lumapi.FDTD()               │          │
 │                                        │ - load() / run() / get()    │          │
@@ -1332,28 +1332,67 @@ $ sim --host <span class="number">100.65.58.250</span> --port <span class="numbe
   detected 1 installation(s):
   - comsol 6.4 at C:\Program Files\COMSOL\COMSOL64</span>
 
-<span class="comment"># Lumerical 测试</span>
-$ sim --host <span class="number">100.65.228.190</span> --port <span class="number">7601</span> check lumerical-fdtd
-<span class="string">[sim] check: lumerical-fdtd
-  detected 1 installation(s):
-  - lumerical-fdtd 241 at D:\Program Files\Lumerical\v241</span>
+<span class="comment"># Lumerical 测试 (v252)</span>
+$ curl -s http://<span class="number">100.65.228.190</span>:<span class="number">7601</span>/detect/lumerical-fdtd
+<span class="string">{"ok":true,"data":{"installs":[{"version":"252","path":"D:\\Program Files\\Lumerical\\v241"}]}}</span>
 
 <span class="comment"># CMD 测试 ⭐新增</span>
 $ curl -s http://localhost:<span class="number">7602</span>/health
-<span class="string">{"ok":true,"data":{"status":"healthy","solver":"cmd",...}}</span>
-
-$ curl -s -X POST http://localhost:<span class="number">7602</span>/connect \
-  -d <span class="string">'{"solver":"cmd","username":"admin","password":"test123"}'</span>
-<span class="string">{"ok":true,"data":{"session_id":"cmd-xxx",...}}</span></div>
+<span class="string">{"ok":true,"data":{"status":"healthy","solver":"cmd",...}}</span></div>
 
             <div style="margin-top: 20px; position: relative; z-index: 1;">
                 <span class="badge badge-success">✓ COMSOL 连接成功</span>
+                <span class="badge badge-success">✓ Lumerical v252 检测成功</span>
                 <span class="badge badge-success">✓ Lumerical 连接成功</span>
                 <span class="badge badge-success">✓ CMD 认证成功</span>
-                <span class="badge badge-success">✓ CMD 确认机制成功</span>
-                <span class="badge badge-success">✓ CMD 命令执行成功</span>
             </div>
-            <div class="slide-number">13 / 18</div>
+            <div class="slide-number">13 / 19</div>
+        </div>
+
+        <!-- Slide 13.5: Remote Agent Collaboration -->
+        <div class="slide slide-dark">
+            <div class="bg-grid"></div>
+            <div class="slide-header">
+                <div class="slide-tag">协作</div>
+                <h2>多 Agent 协作调试 ⭐新增</h2>
+                <p>远程 Windows Agent 自主发现并修复问题</p>
+            </div>
+            
+            <div class="content-grid grid-2" style="position: relative; z-index: 1;">
+                <div class="card">
+                    <h4 style="color: var(--warning);">发现的问题</h4>
+                    <ul>
+                        <li><span class="badge badge-warning">BUG</span> detect 端点路径不匹配</li>
+                        <li><span class="badge badge-warning">BUG</span> 响应结构解析错误</li>
+                        <li><span class="badge badge-warning">BUG</span> 版本号显示为 v241 而非 v252</li>
+                        <li><span class="badge badge-info">缺失</span> lumerical_agent_server.py 未在仓库中</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4 style="color: var(--success);">远程 Agent 修复</h4>
+                    <ul>
+                        <li><span class="badge badge-success">✓</span> <code>/detect</code> → <code>/detect/{solver}</code></li>
+                        <li><span class="badge badge-success">✓</span> 解析 <code>data.installs[0]</code> 嵌套结构</li>
+                        <li><span class="badge badge-success">✓</span> 从父目录名提取 v252 版本号</li>
+                        <li><span class="badge badge-success">✓</span> 添加 server.py 到插件目录</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="code-block" style="margin-top: 30px; position: relative; z-index: 1;" data-lang="bash">
+<span class="comment"># 远程 Agent 推送的修复 commits</span>
+$ git log --oneline -5
+<span class="string">8390d58 fix: detect v252 from parent directory name
+bdae6a9 feat: add lumerical_agent_server.py to plugin
+4e62330 fix: adapt detect endpoint to match server API
+841e6d6 fix: use GitHub username as author
+35e39c8 fix: security and code quality improvements</span>
+
+<span class="comment"># 版本检测修复后</span>
+$ curl -s http://<span class="number">100.65.228.190</span>:<span class="number">7601</span>/detect/lumerical-fdtd | python3 -c \
+  <span class="string">"import sys,json; d=json.load(sys.stdin); print('Version:', d['data']['installs'][0]['version'])"</span>
+<span class="string">Version: 252</span></div>
+            <div class="slide-number">13.5 / 19</div>
         </div>
 
         <!-- Slide 14: NetBird -->
@@ -1406,7 +1445,7 @@ $ curl -s -X POST http://localhost:<span class="number">7602</span>/connect \
                     </div>
                 </div>
             </div>
-            <div class="slide-number">14 / 18</div>
+            <div class="slide-number">14 / 19</div>
         </div>
 
         <!-- Slide 15: Workflow -->
@@ -1450,7 +1489,7 @@ sim --host <span class="number">100.65.228.190</span> --port <span class="number
 
 <span class="comment"># 5. 断开连接</span>
 sim --host <span class="number">100.65.228.190</span> --port <span class="number">7601</span> --session s-xxx disconnect</div>
-            <div class="slide-number">15 / 18</div>
+            <div class="slide-number">15 / 19</div>
         </div>
 
         <!-- Slide 16: Project Summary -->
@@ -1509,7 +1548,7 @@ sim --host <span class="number">100.65.228.190</span> --port <span class="number
                     </ul>
                 </div>
             </div>
-            <div class="slide-number">16 / 18</div>
+            <div class="slide-number">16 / 19</div>
         </div>
 
         <!-- Slide 17: Future Work -->
@@ -1558,7 +1597,7 @@ Mac (Agent) ──► 统一网关 ──► Windows (COMSOL)
                          ──► Linux (OpenFOAM)
                          ──► 云端 (ANSYS Cloud)</div>
             </div>
-            <div class="slide-number">17 / 18</div>
+            <div class="slide-number">17 / 19</div>
         </div>
 
         <!-- Slide 18: Thank You -->
@@ -1577,14 +1616,15 @@ Mac (Agent) ──► 统一网关 ──► Windows (COMSOL)
                         项目地址
                     </p>
                     <div class="code-block" style="text-align: left; display: inline-block; min-width: 500px;" data-lang="text">
-/Users/cq/WorkingProjects/
-├── sim-plugin-comsol/      # COMSOL 插件
-├── sim-plugin-lumerical/   # Lumerical 插件
-├── sim-plugin-cmd/         # CMD 插件 ⭐新增
-└── GAN_DFB_PSP_PHASEJUMP2/
-    └── lumerical-ppt-report/
-        ├── index.html      # PPT v1
-        └── index-v3.html   # PPT v3 (本文件)</div>
+GitHub: https://github.com/ww123cqrt-prog/sim-plugins
+├── plugins/
+│   ├── sim-plugin-comsol/      # COMSOL 插件
+│   ├── sim-plugin-lumerical/   # Lumerical 插件 + server
+│   └── sim-plugin-cmd/         # CMD 插件 + server ⭐
+├── docs/
+│   └── ppt-report/
+│       └── index.html          # 本 PPT (v4)
+└── README.md</div>
                 </div>
                 
                 <div style="margin-top: 48px;">
@@ -1595,7 +1635,7 @@ Mac (Agent) ──► 统一网关 ──► Windows (COMSOL)
                     <span class="badge badge-success">CMD Server ⭐</span>
                 </div>
             </div>
-            <div class="slide-number">18 / 18</div>
+            <div class="slide-number">18 / 19</div>
         </div>
     </div>
 

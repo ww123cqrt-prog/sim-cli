@@ -360,14 +360,21 @@ class CmdDriver:
                 else:  # cmd
                     cmd = ["cmd", "/c", code]
 
+                # Use CREATE_NO_WINDOW on Windows to prevent start command
+                # from hijacking the parent's console/pipe
+                creationflags = 0
+                if platform.system() == "Windows":
+                    creationflags = subprocess.CREATE_NO_WINDOW
+
                 # Execute command
                 result = subprocess.run(
                     cmd,
                     cwd=state.cwd,
                     capture_output=True,
                     text=True,
-                    timeout=300,  # 5 minute timeout per command
+                    timeout=300,
                     shell=False,
+                    creationflags=creationflags,
                 )
 
                 duration = time.monotonic() - start

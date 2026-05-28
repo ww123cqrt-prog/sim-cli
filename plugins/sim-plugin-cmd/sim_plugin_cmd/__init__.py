@@ -1,0 +1,318 @@
+"""CMD/Shell command execution driver for sim-cli.
+
+Allows executing shell commands on remote machines via sim-cli.
+Designed for personal use on trusted networks.
+
+Security Features:
+- Username/password authentication
+- Remote confirmation (once per session)
+- Auto-exit timeout (no activity for N seconds)
+
+Usage:
+    # Start with authentication
+    python -m sim serve --port 7602 --host 0.0.0.0 --username admin --password mypass
+
+    # Start with timeout (600 seconds = 10 minutes)
+    python -m sim serve --port 7602 --host 0.0.0.0 --timeout 600
+
+    # Start with confirmation required
+    python -m sim serve --port 7602 --host 0.0.0.0 --require-confirm
+
+    # Connect from local Mac
+    sim --host <ip> --port 7602 connect --solver cmd --username admin --password mypass
+"""
+from __future__ import annotations
+
+import os
+import platform
+import subprocess
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from sim.driver import ConnectionInfo, LintResult, SolverInstall
+
+
+@dataclass
+class SessionState:
+    """Session state for CMD driver."""
+    session_id: str
+    shell: str = "cmd"  # cmd, powershell, bash
+    cwd: str = ""
+    env: dict = field(default_factory=dict)
+    connected_at: float = 0
+    last_activity: float = 0
+    run_count: int = 0
+    confirmed: bool = False  # Whether user has confirmed this session
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+
+class CmdDriver:
+    """sim-cli driver for executing shell commands.
+
+    Security features:
+    - Username/password authentication
+    - Remote confirmation (once per session)
+    - Auto-exit timeout
+    """
+
+    name = "cmd"
+    supports_session = True
+
+    def __init__(
+        self,
+        username: str = None,
+        password: str = None,
+        require_confirm: bool = False,
+        timeout: int = 0,  # 0 = no timeout
+    ):
+        self._sessions: dict[str, SessionState] = {}
+        self._sessions_lock = threading.Lock()
+        self._username = username
+        self._password = password
+        self._require_confirm = require_confirm
+        self._timeout = timeout
+        self._last_activity = time.time()
+        self._shutdown_event = threading.Event()
+
+        # Start timeout monitor if configured
+        if timeout > 0:
+            self._timeout_thread = threading.Thread(
+                target=self._timeout_monitor,
+                daemon=True,
+            )
+            self._timeout_thread.start()
+
+    def _timeout_monitor(self):
+        """Monitor for inactivity and shutdown if timeout exceeded."""
+        while not self._shutdown_event.is_set():
+            time.sleep(10)  # Check every 10 seconds
+
+            with self._sessions_lock:
+                if self._sessions:
+                    # Check each session
+                    expired = []
+                    for sid, state in self._sessions.items():
+                        if time.time() - state.last_activity > self._timeout:
+                            expired.append(sid)
+
+                    # Remove expired sessions
+                    for sid in expired:
+                        del self._sessions[sid]
+                        print(f"[cmd-server] Session {sid} expired due to inactivity")
+
+                # If no sessions and timeout exceeded, shutdown
+                if not self._sessions and time.time() - self._last_activity > self._timeout:
+                    print(f"[cmd-server] No activity for {self._timeout}s, shutting down...")
+                    self._shutdown_event.set()
+                    os._exit(0)
+
+    def authenticate(self, username: str, password: str) -> bool:
+        """Verify credentials."""
+        if self._username is None and self._password is None:
+            return True  # No auth configured
+        return username == self._username and password == self._password
+
+    def detect_installed(self) -> list[SolverInstall]:
+        """CMD is always available."""
+        shell = "cmd" if platform.system() == "Windows" else "bash"
+        return [SolverInstall(
+            name="cmd",
+            version=platform.version(),
+            path=shell,
+            source="system",
+            extra={"platform": platform.system()},
+        )]
+
+    def connect(self, **kwargs) -> dict:
+        """Create a new CMD session."""
+        return self.launch(**kwargs)
+
+    def launch(self, shell: str = "cmd", cwd: str = None, **kwargs) -> dict:
+        """Launch a CMD session."""
+        sid = f"cmd-{uuid.uuid4().hex[:8]}"
+
+        # Determine default shell based on platform
+        if shell == "cmd" and platform.system() != "Windows":
+            shell = "bash"
+
+        if cwd is None:
+            cwd = os.getcwd()
+
+        now = time.time()
+        state = SessionState(
+            session_id=sid,
+            shell=shell,
+            cwd=cwd,
+            connected_at=now,
+            last_activity=now,
+            confirmed=not self._require_confirm,  # Auto-confirm if not required
+        )
+
+        with self._sessions_lock:
+            self._sessions[sid] = state
+            self._last_activity = now
+
+        return {
+            "ok": True,
+            "data": {
+                "session_id": sid,
+                "solver": "cmd",
+                "mode": "session",
+                "shell": shell,
+                "cwd": cwd,
+                "connected_at": state.connected_at,
+                "run_count": 0,
+                "profile": None,
+                "requires_confirm": self._require_confirm and not state.confirmed,
+            },
+        }
+
+    def confirm_session(self, session_id: str) -> dict:
+        """Confirm a session (allow command execution)."""
+        with self._sessions_lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return {"ok": False, "error": f"Session not found: {session_id}"}
+
+            state.confirmed = True
+            state.last_activity = time.time()
+
+        return {
+            "ok": True,
+            "data": {
+                "session_id": session_id,
+                "confirmed": True,
+                "message": "Session confirmed. Commands can now be executed.",
+            },
+        }
+
+    def run(self, code: str, label: str = "") -> dict:
+        """Execute a shell command (called by sim-server)."""
+        # Find the session (use the first one if multiple)
+        with self._sessions_lock:
+            if not self._sessions:
+                return {"ok": False, "error": "No active sessions"}
+            state = next(iter(self._sessions.values()))
+
+        return self._exec_impl(state, code, label)
+
+    def exec(self, session_id: str, code: str, label: str = "") -> dict:
+        """Execute a shell command (direct call)."""
+        with self._sessions_lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return {"ok": False, "error": f"Session not found: {session_id}"}
+
+        return self._exec_impl(state, code, label)
+
+    def _exec_impl(self, state: SessionState, code: str, label: str = "") -> dict:
+        """Internal implementation for executing shell commands."""
+        # Check if session is confirmed
+        if not state.confirmed:
+            return {
+                "ok": False,
+                "error": "Session not confirmed. Call /confirm first.",
+                "requires_confirm": True,
+                "session_id": state.session_id,
+            }
+
+        with state.lock:
+            start = time.monotonic()
+
+            try:
+                # Determine shell command
+                if state.shell == "powershell":
+                    cmd = ["powershell", "-Command", code]
+                elif state.shell == "bash":
+                    cmd = ["bash", "-c", code]
+                else:  # cmd
+                    cmd = ["cmd", "/c", code]
+
+                # Execute command
+                result = subprocess.run(
+                    cmd,
+                    cwd=state.cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,  # 5 minute timeout per command
+                    shell=False,
+                )
+
+                duration = time.monotonic() - start
+                state.run_count += 1
+                state.last_activity = time.time()
+                self._last_activity = time.time()
+
+                return {
+                    "ok": result.returncode == 0,
+                    "session_id": state.session_id,
+                    "exit_code": result.returncode,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "duration_s": round(duration, 3),
+                    "command": code,
+                    "label": label,
+                    "shell": state.shell,
+                    "cwd": state.cwd,
+                    "started_at": time.time(),
+                }
+
+            except subprocess.TimeoutExpired:
+                return {
+                    "ok": False,
+                    "error": "Command timed out after 300 seconds",
+                }
+            except Exception as e:
+                return {
+                    "ok": False,
+                    "error": str(e),
+                }
+
+    def disconnect(self, session_id: str) -> dict:
+        """Disconnect a CMD session."""
+        with self._sessions_lock:
+            state = self._sessions.pop(session_id, None)
+
+        if state is None:
+            return {"ok": False, "error": f"Session not found: {session_id}"}
+
+        return {
+            "ok": True,
+            "data": {
+                "session_id": session_id,
+                "disconnected": True,
+            },
+        }
+
+    def inspect(self, session_id: str, name: str) -> dict:
+        """Query session state."""
+        with self._sessions_lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return {"ok": False, "error": f"Session not found: {session_id}"}
+
+        if name == "session.summary":
+            return {
+                "ok": True,
+                "data": {
+                    "session_id": state.session_id,
+                    "solver": "cmd",
+                    "shell": state.shell,
+                    "cwd": state.cwd,
+                    "connected_at": state.connected_at,
+                    "last_activity": state.last_activity,
+                    "run_count": state.run_count,
+                    "confirmed": state.confirmed,
+                    "connected": True,
+                },
+            }
+
+        return {"ok": False, "error": f"Unknown inspect target: {name}"}
+
+
+# Export for plugin discovery
+skills_dir = None  # No skills directory for cmd plugin

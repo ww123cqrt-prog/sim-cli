@@ -43,6 +43,10 @@ class SessionState:
     last_activity: float = 0
     run_count: int = 0
     confirmed: bool = False  # Whether user has confirmed this session
+    pending_approval: bool = False  # Waiting for human approval
+    approval_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    approval_result: bool = False  # Human's decision
+    client_info: str = ""  # Client IP/port for display
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
@@ -187,8 +191,8 @@ class CmdDriver:
             },
         }
 
-    def confirm_session(self, session_id: str, auth_token: str) -> dict:
-        """Confirm a session (allow command execution)."""
+    def confirm_session(self, session_id: str, auth_token: str, client_info: str = "", timeout: int = 180) -> dict:
+        """Request human approval for a session. Blocks until approved/denied or timeout."""
         # Verify token
         token_sid = self.verify_token(auth_token)
         if token_sid != session_id:
@@ -199,16 +203,100 @@ class CmdDriver:
             if state is None:
                 return {"ok": False, "error": f"Session not found: {session_id}"}
 
-            state.confirmed = True
-            state.last_activity = time.time()
+            if state.confirmed:
+                return {
+                    "ok": True,
+                    "data": {
+                        "session_id": session_id,
+                        "confirmed": True,
+                        "message": "Session already confirmed.",
+                    },
+                }
 
+            state.pending_approval = True
+            state.client_info = client_info
+
+        # Print approval request to terminal
+        print("\n" + "=" * 60)
+        print(f"[APPROVAL REQUIRED] Remote connection request")
+        print(f"  Session ID: {session_id}")
+        print(f"  Client:     {client_info}")
+        print(f"  Shell:      {state.shell}")
+        print(f"  Timeout:    {timeout}s")
+        print(f"  Time:       {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60)
+
+        # Wait for human input with timeout
+        import sys
+        import select
+
+        deadline = time.time() + timeout
+        print(f"  Approve this connection? (y/n) [{timeout}s timeout]: ", end="", flush=True)
+
+        while time.time() < deadline:
+            remaining = int(deadline - time.time())
+            try:
+                # Use threading to implement timeout for input
+                result_holder = [None]
+                def get_input():
+                    try:
+                        result_holder[0] = input().strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        result_holder[0] = "__interrupt__"
+
+                input_thread = threading.Thread(target=get_input, daemon=True)
+                input_thread.start()
+                input_thread.join(timeout=min(remaining, 1))
+
+                if result_holder[0] is None:
+                    # Timeout on this iteration, check deadline
+                    if time.time() >= deadline:
+                        break
+                    continue
+
+                answer = result_holder[0]
+                if answer == "__interrupt__":
+                    break
+
+                if answer in ('y', 'yes'):
+                    with self._sessions_lock:
+                        state.confirmed = True
+                        state.pending_approval = False
+                        state.last_activity = time.time()
+                    state.approval_event.set()
+                    print(f"  [APPROVED] Session {session_id}\n")
+                    return {
+                        "ok": True,
+                        "data": {
+                            "session_id": session_id,
+                            "confirmed": True,
+                            "message": "Session approved by human operator.",
+                        },
+                    }
+                elif answer in ('n', 'no'):
+                    with self._sessions_lock:
+                        state.pending_approval = False
+                    state.approval_event.set()
+                    print(f"  [DENIED] Session {session_id}\n")
+                    return {
+                        "ok": False,
+                        "error": "Connection denied by human operator.",
+                    }
+                else:
+                    print("  Please enter 'y' or 'n': ", end="", flush=True)
+                    continue
+
+            except (EOFError, KeyboardInterrupt):
+                break
+
+        # Timeout or interrupt
+        with self._sessions_lock:
+            state.pending_approval = False
+        state.approval_event.set()
+        print(f"\n  [DENIED] Session {session_id} (timeout {timeout}s)\n")
         return {
-            "ok": True,
-            "data": {
-                "session_id": session_id,
-                "confirmed": True,
-                "message": "Session confirmed. Commands can now be executed.",
-            },
+            "ok": False,
+            "error": f"Approval timed out after {timeout}s.",
         }
 
     def run(self, code: str, label: str = "", auth_token: str = "") -> dict:

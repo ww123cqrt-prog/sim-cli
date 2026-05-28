@@ -168,11 +168,15 @@ def main():
 
     @app.post("/confirm")
     def confirm_session(
+        request: Request,
         session_id: str = Body(..., embed=True),
         auth_token: str = Depends(get_auth_token),
     ):
-        """Confirm a session. Requires valid auth token."""
-        result = driver.confirm_session(session_id, auth_token)
+        """Request human approval. Blocks until operator approves/denies in terminal."""
+        client_host = request.client.host if request.client else "unknown"
+        client_port = request.client.port if request.client else 0
+        client_info = f"{client_host}:{client_port}"
+        result = driver.confirm_session(session_id, auth_token, client_info=client_info)
         if not result.get("ok"):
             if "Invalid auth token" in result.get("error", ""):
                 raise HTTPException(401, result["error"])

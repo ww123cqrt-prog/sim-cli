@@ -90,8 +90,13 @@ def find_lumerical_install() -> Path | None:
     ]
     for base_path in candidates:
         if base_path.exists():
+            # Check if directory name itself is a version (e.g., v241)
             if base_path.name.startswith("v") and base_path.name[1:].isdigit():
                 return base_path
+            # Check parent directory name (e.g., ...\v252\Lumerical)
+            if base_path.parent.name.startswith("v") and base_path.parent.name[1:].isdigit():
+                return base_path
+            # Look for version subdirectories
             version_dirs = [
                 d for d in base_path.iterdir()
                 if d.is_dir() and d.name.startswith("v") and d.name[1:].isdigit()
@@ -258,7 +263,13 @@ def detect_solver(solver: str):
     resolutions: list[dict] = []
 
     if install:
-        version = install.name.lstrip("v") if install.name.startswith("v") else install.name
+        # Extract version from directory name or parent directory name
+        if install.name.startswith("v") and install.name[1:].isdigit():
+            version = install.name[1:]
+        elif install.parent.name.startswith("v") and install.parent.name[1:].isdigit():
+            version = install.parent.name[1:]
+        else:
+            version = install.name
         python_path = find_python_path(install)
         inst_dict = {
             "name": solver,

@@ -489,7 +489,7 @@ def eval_python(
     return {
         "ok": ok,
         "data": {
-            "result": sanitized_result,
+            "result": result_val,
             "session_id": state.session_id,
             "duration_s": round(duration, 3),
             "error": error,

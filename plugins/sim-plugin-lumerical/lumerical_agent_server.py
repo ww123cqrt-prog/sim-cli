@@ -462,12 +462,21 @@ def eval_python(
             try:
                 exec_globals = {"fdtd": state.fdtd, "__builtins__": __builtins__}
                 result_val = eval(code, exec_globals)
+                if result_val is not None:
+                    try:
+                        result_val = _sanitize_for_json(result_val)
+                    except Exception:
+                        result_val = None
             except SyntaxError:
                 try:
                     exec_locals: dict[str, Any] = {"fdtd": state.fdtd}
                     exec(code, {"__builtins__": __builtins__}, exec_locals)
                     if "result" in exec_locals:
                         result_val = exec_locals["result"]
+                        try:
+                            result_val = _sanitize_for_json(result_val)
+                        except Exception:
+                            result_val = None
                 except Exception as e:
                     ok = False
                     error = str(e)
@@ -476,12 +485,6 @@ def eval_python(
                 error = str(e)
 
         duration = time.monotonic() - start
-        sanitized_result = None
-        if result_val is not None:
-            try:
-                sanitized_result = _sanitize_for_json(result_val)
-            except Exception:
-                sanitized_result = None
 
     return {
         "ok": ok,

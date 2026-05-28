@@ -90,7 +90,13 @@ def _sanitize_for_json(obj: Any) -> Any:
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_sanitize_for_json(v) for v in obj]
-    return obj
+    # Try to convert to string if not JSON serializable
+    try:
+        import json
+        json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        return str(obj)
 
 
 class _NaNSafeJSONResponse(JSONResponse):

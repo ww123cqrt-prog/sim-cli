@@ -60,6 +60,16 @@ log = logging.getLogger("lumerical-agent-server")
 # ── NaN-safe JSON ────────────────────────────────────────────────────────────
 
 def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively sanitize an object for JSON serialization.
+
+    Handles: NaN/Inf floats, numpy arrays, nested dicts/lists.
+    """
+    # numpy array → nested list
+    if hasattr(obj, "tolist"):
+        return obj.tolist()
+    # numpy scalar → Python scalar
+    if hasattr(obj, "item"):
+        return obj.item()
     if isinstance(obj, float):
         if math.isnan(obj) or math.isinf(obj):
             return None
@@ -405,6 +415,66 @@ def exec_snippet(
         state.run_count += 1
 
     return {"ok": ok, "data": result}
+
+
+@app.post("/eval")
+def eval_python(
+    req: dict[str, Any],
+    x_sim_session: str | None = Header(default=None, alias="X-Sim-Session"),
+):
+    """Execute Python code with access to the fdtd object.
+
+    Unlike /exec which runs LSF code via fdtd.eval(), /eval runs
+    Python code where `fdtd` is available as a local variable.
+    Results are properly serialized (numpy arrays → nested lists).
+
+    Used by RemoteLumapi adapter to call lumapi methods like:
+        fdtd.getresult("monitor", "T")
+        fdtd.addrect()
+        fdtd.setnamed("::model::", "x", 0)
+    """
+    code = req.get("code", "")
+    session_id = req.get("session_id")
+    state = _select_session(session_id or x_sim_session)
+
+    with state.lock:
+        start = time.monotonic()
+        ok = True
+        result_val = None
+        error = None
+
+        if state.fdtd is None:
+            ok = False
+            error = "no active FDTD instance — POST /connect first"
+        else:
+            try:
+                exec_globals = {"fdtd": state.fdtd, "__builtins__": __builtins__}
+                result_val = eval(code, exec_globals)
+            except SyntaxError:
+                try:
+                    exec_locals: dict[str, Any] = {"fdtd": state.fdtd}
+                    exec(code, {"__builtins__": __builtins__}, exec_locals)
+                    if "result" in exec_locals:
+                        result_val = exec_locals["result"]
+                except Exception as e:
+                    ok = False
+                    error = str(e)
+            except Exception as e:
+                ok = False
+                error = str(e)
+
+        duration = time.monotonic() - start
+        sanitized_result = _sanitize_for_json(result_val) if result_val is not None else None
+
+    return {
+        "ok": ok,
+        "data": {
+            "result": sanitized_result,
+            "session_id": state.session_id,
+            "duration_s": round(duration, 3),
+            "error": error,
+        },
+    }
 
 
 @app.post("/run")

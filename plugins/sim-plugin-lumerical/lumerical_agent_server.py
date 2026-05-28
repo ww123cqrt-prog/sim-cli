@@ -464,7 +464,12 @@ def eval_python(
                 error = str(e)
 
         duration = time.monotonic() - start
-        sanitized_result = _sanitize_for_json(result_val) if result_val is not None else None
+        sanitized_result = None
+        if result_val is not None:
+            try:
+                sanitized_result = _sanitize_for_json(result_val)
+            except Exception:
+                sanitized_result = None
 
     return {
         "ok": ok,

@@ -61,7 +61,7 @@ def main():
     )
 
     # Create FastAPI app
-    app = FastAPI(title="cmd-server", version="1.1.0")
+    app = FastAPI(title="cmd-server", version="1.2.0")
 
     # CORS - restrict to same origin
     app.add_middleware(
@@ -135,15 +135,20 @@ def main():
         mode: str = Body(default="session"),
         username: Optional[str] = Body(default=None),
         password: Optional[str] = Body(default=None),
+        timeout: Optional[int] = Body(default=None),
     ):
-        """Create a new session. Returns auth_token for subsequent requests."""
+        """Create a new session. Returns auth_token for subsequent requests.
+
+        Args:
+            timeout: Per-session idle timeout in seconds (None = use server default)
+        """
         # Check authentication if configured
         if driver._username or driver._password_hash:
             if not username or not password:
                 raise HTTPException(401, "Authentication required. Provide username and password.")
             if not driver.authenticate(username, password):
                 raise HTTPException(401, "Invalid credentials.")
-        result = driver.launch()
+        result = driver.launch(timeout=timeout)
         if not result.get("ok"):
             raise HTTPException(500, result.get("error", "Failed to create session"))
         return result

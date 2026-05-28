@@ -48,6 +48,7 @@ class SessionState:
     approval_result: bool = False  # Human's decision
     client_info: str = ""  # Client IP/port for display
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    timeout: int = 0  # Per-session idle timeout (0 = use server default)
 
 
 def _hash_password(password: str) -> str:
@@ -103,7 +104,9 @@ class CmdDriver:
                     # Check each session
                     expired = []
                     for sid, state in self._sessions.items():
-                        if time.time() - state.last_activity > self._timeout:
+                        # Use per-session timeout if set, otherwise server default
+                        session_timeout = state.timeout if state.timeout > 0 else self._timeout
+                        if session_timeout > 0 and time.time() - state.last_activity > session_timeout:
                             expired.append(sid)
 
                     # Remove expired sessions
@@ -113,7 +116,7 @@ class CmdDriver:
                         print(f"[cmd-server] Session {sid} expired due to inactivity")
 
                 # If no sessions and timeout exceeded, shutdown
-                if not self._sessions and time.time() - self._last_activity > self._timeout:
+                if not self._sessions and self._timeout > 0 and time.time() - self._last_activity > self._timeout:
                     print(f"[cmd-server] No activity for {self._timeout}s, shutting down...")
                     self._shutdown_event.set()
                     os._exit(0)
@@ -147,8 +150,14 @@ class CmdDriver:
         """Create a new CMD session."""
         return self.launch(**kwargs)
 
-    def launch(self, shell: str = "cmd", cwd: str = None, **kwargs) -> dict:
-        """Launch a CMD session."""
+    def launch(self, shell: str = "cmd", cwd: str = None, timeout: int = None, **kwargs) -> dict:
+        """Launch a CMD session.
+
+        Args:
+            shell: Shell type (cmd, powershell, bash)
+            cwd: Working directory
+            timeout: Per-session idle timeout in seconds (None = use server default)
+        """
         sid = f"cmd-{uuid.uuid4().hex[:12]}"
         token = uuid.uuid4().hex  # Auth token for subsequent requests
 
@@ -168,6 +177,7 @@ class CmdDriver:
             connected_at=now,
             last_activity=now,
             confirmed=not self._require_confirm,  # Auto-confirm if not required
+            timeout=timeout or 0,
         )
 
         with self._sessions_lock:
@@ -188,6 +198,7 @@ class CmdDriver:
                 "run_count": 0,
                 "profile": None,
                 "requires_confirm": self._require_confirm and not state.confirmed,
+                "timeout": state.timeout if state.timeout > 0 else self._timeout,
             },
         }
 

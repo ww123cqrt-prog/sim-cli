@@ -57,6 +57,18 @@ logging.basicConfig(
 log = logging.getLogger("lumerical-agent-server")
 
 
+# ── Lumerical PATH setup ────────────────────────────────────────────────────
+# Add Lumerical's bin directory to PATH so interopapi.dll can find its dependencies.
+# This allows using any Python (e.g. Anaconda) to import lumapi.
+_LUMERICAL_INSTALL = Path(r"C:\Program Files\Ansys Inc\v252\Lumerical")
+_LUMERICAL_BIN = _LUMERICAL_INSTALL / "bin"
+if _LUMERICAL_BIN.exists():
+    _bin_str = str(_LUMERICAL_BIN)
+    if _bin_str not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = _bin_str + ";" + os.environ.get("PATH", "")
+        log.info("Added Lumerical bin to PATH: %s", _bin_str)
+
+
 # ── NaN-safe JSON ────────────────────────────────────────────────────────────
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -154,7 +166,7 @@ def _import_lumapi():
 
 app = FastAPI(
     title="lumerical-agent-server",
-    version="1.0.0",
+    version="1.1.0",
     default_response_class=_NaNSafeJSONResponse,
 )
 
@@ -241,7 +253,7 @@ def _list_sessions() -> list[SessionState]:
 
 @app.get("/version")
 def version():
-    return {"version": "1.0.0"}
+    return {"version": app.version}
 
 
 @app.get("/health")

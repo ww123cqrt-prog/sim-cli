@@ -4,7 +4,7 @@ sim-cli 增强插件，支持通过 HTTP 远程调用 Lumerical FDTD/RCWA。
 
 ## 版本
 
-0.2.0
+1.1.0
 
 ## 功能
 
@@ -95,6 +95,53 @@ with RemoteLumapi(host="100.65.228.190", port=7601) as fdtd:
 - uvicorn
 - httpx >= 0.24
 - lumapi（Windows 端由 Lumerical 自带 Python 提供）
+
+## 潜在问题与解决方案
+
+### 问题 1: lumapi 无法导入
+
+**现象：** 使用非 Lumerical Python（如 Anaconda）启动服务器时，`import lumapi` 失败。
+
+**原因：** `lumapi` 是 Lumerical 的 Python 绑定，依赖 `interopapi.dll`，而该 DLL 又依赖 Lumerical `bin/` 目录下的 150+ 个 DLL（Qt、VTK、MKL 等）。
+
+**解决方案：** 服务器脚本已内置自动 PATH 设置（v1.1.0+）。启动时会自动将 Lumerical 的 `bin/` 目录添加到 PATH 环境变量。
+
+```python
+# 服务器启动时自动执行：
+_LUMERICAL_INSTALL = Path(r"C:\Program Files\Ansys Inc\v252\Lumerical")
+_LUMERICAL_BIN = _LUMERICAL_INSTALL / "bin"
+if _LUMERICAL_BIN.exists():
+    os.environ["PATH"] = str(_LUMERICAL_BIN) + ";" + os.environ.get("PATH", "")
+```
+
+**验证方法：**
+```bash
+# 检查服务器日志，应显示：
+# [INFO] Added Lumerical bin to PATH: C:\Program Files\Ansys Inc\v252\Lumerical\bin
+
+# 或手动测试：
+python -c "import lumapi; print('OK')"
+```
+
+### 问题 2: Python 路径配置
+
+**现象：** 服务器无法找到 Lumerical 安装目录。
+
+**解决方案：** 创建 `.pth` 文件让 Anaconda 能找到 lumapi：
+
+```powershell
+# 创建 .pth 文件（一次性操作）
+Set-Content -Path "C:\Users\11\anaconda3\Lib\site-packages\lumerical.pth" `
+  -Value "C:\Program Files\Ansys Inc\v252\Lumerical\api\python" -Encoding UTF8
+```
+
+### 问题 3: 版本检测错误
+
+**现象：** v252 被检测为 v241。
+
+**原因：** 早期版本只检查目录名，v252 的目录结构是 `v252/Lumerical/`，父目录名才是版本号。
+
+**解决方案：** 已在 v0.2.0 修复，现在会同时检查目录名和父目录名。
 
 ## 许可证
 

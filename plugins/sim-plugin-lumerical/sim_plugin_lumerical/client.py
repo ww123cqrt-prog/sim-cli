@@ -52,9 +52,9 @@ class LumericalClient:
         """Check if the remote server is healthy."""
         return self.get("/health")
 
-    def detect(self) -> dict[str, Any]:
+    def detect(self, solver: str = "lumerical-fdtd") -> dict[str, Any]:
         """Detect Lumerical installation on remote machine."""
-        return self.get("/detect")
+        return self.get(f"/detect/{solver}")
 
     def get(self, path: str) -> dict[str, Any]:
         """Send GET request to the remote server."""

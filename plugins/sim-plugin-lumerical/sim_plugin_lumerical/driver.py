@@ -103,14 +103,17 @@ class LumericalFDTDDriver:
     def detect_installed(self) -> list[SolverInstall]:
         """Scan remote host for Lumerical installations via HTTP."""
         try:
-            response = self.client.detect()
+            response = self.client.detect(self.name)
             if response.get("ok"):
+                data = response.get("data", {})
+                installs = data.get("installs", [])
                 return [SolverInstall(
-                    name="lumerical-fdtd",
-                    version=response.get("version", "unknown"),
-                    path=response.get("path", "remote"),
+                    name=inst.get("name", self.name),
+                    version=inst.get("version", "unknown"),
+                    path=inst.get("path", "remote"),
                     source=f"remote:{self.host}:{self.port}",
-                )]
+                    extra=inst.get("extra", {}),
+                ) for inst in installs]
         except Exception as e:
             log.debug("Detection failed: %s", e)
         return []
@@ -129,7 +132,7 @@ class LumericalFDTDDriver:
                 )
 
             # Detect Lumerical installation
-            detect = self.client.detect()
+            detect = self.client.detect(self.name)
             if not detect.get("ok"):
                 return ConnectionInfo(
                     solver="lumerical-fdtd",
@@ -138,6 +141,11 @@ class LumericalFDTDDriver:
                     message=f"Lumerical not found on remote: {detect.get('error', 'unknown')}",
                 )
 
+            # Get version from nested response
+            data = detect.get("data", {})
+            installs = data.get("installs", [])
+            version = installs[0].get("version") if installs else None
+
             # Connect to server
             response = self.client.post("/connect")
             if response.get("ok"):
@@ -145,14 +153,14 @@ class LumericalFDTDDriver:
                 self._connected_at = time.time()
                 return ConnectionInfo(
                     solver="lumerical-fdtd",
-                    version=detect.get("version"),
+                    version=version,
                     status="ok",
                     message="Connected to remote Lumerical server",
                 )
             else:
                 return ConnectionInfo(
                     solver="lumerical-fdtd",
-                    version=detect.get("version"),
+                    version=version,
                     status="error",
                     message=response.get("error", "Connection failed"),
                 )

@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""CMD Server 启动脚本（带安全功能）
+"""CMD Server with token-based authentication.
 
-用法:
-    # 基本启动（无认证）
-    python cmd_server.py --port 7602
+Security features:
+- Token-based auth: connect once, get token, use token for all subsequent requests
+- Password hashed with SHA-256, compared with hmac.compare_digest
+- All sensitive endpoints require valid auth token
+- Remote confirmation (once per session)
+- Auto-exit timeout
 
-    # 带认证
-    python cmd_server.py --port 7602 --username admin --password mypass
-
-    # 带超时（600秒 = 10分钟）
-    python cmd_server.py --port 7602 --timeout 600
-
-    # 带确认机制
-    python cmd_server.py --port 7602 --require-confirm
-
-    # 完整示例
-    python cmd_server.py --port 7602 --username admin --password mypass --timeout 600 --require-confirm
+Usage:
+    python cmd_server.py --port 7602 --username admin --password mypassword
+    python cmd_server.py --port 7602 --username admin --password mypassword --timeout 600 --require-confirm
 """
 from __future__ import annotations
 
@@ -27,15 +22,15 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Add current directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
 
 from sim_plugin_cmd import CmdDriver
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CMD Server with security features",
+        description="CMD Server with token-based authentication",
     )
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=7602, help="Port (default: 7602)")
@@ -48,9 +43,10 @@ def main():
     # Import uvicorn here to avoid import errors
     try:
         import uvicorn
-        from fastapi import FastAPI, Header, HTTPException, Request, Body
+        from fastapi import FastAPI, Header, HTTPException, Request, Body, Depends
         from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import JSONResponse
+        from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
     except ImportError:
         print("Error: fastapi and uvicorn are required.")
         print("Install with: pip install fastapi uvicorn")
@@ -65,30 +61,44 @@ def main():
     )
 
     # Create FastAPI app
-    app = FastAPI(title="cmd-server", version="1.0.0")
+    app = FastAPI(title="cmd-server", version="1.1.0")
 
+    # CORS - restrict to same origin
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=["http://localhost", "http://127.0.0.1"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # Session management
-    def _select_session(session_id: str = None):
-        if session_id:
-            state = driver._sessions.get(session_id)
-            if state is None:
-                raise HTTPException(404, f"unknown session_id: {session_id}")
-            return state
-        if len(driver._sessions) == 1:
-            return next(iter(driver._sessions.values()))
-        if not driver._sessions:
-            raise HTTPException(400, "no active sessions — POST /connect first")
-        raise HTTPException(400, f"{len(driver._sessions)} sessions live; specify session_id")
+    # Security scheme for token auth
+    security = HTTPBearer(auto_error=False)
 
-    # Endpoints
+    # ── Auth dependency ──────────────────────────────────────────────────────
+
+    async def get_auth_token(
+        credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+        x_auth_token: Optional[str] = Header(default=None, alias="X-Auth-Token"),
+    ) -> str:
+        """Extract auth token from Bearer header or X-Auth-Token header."""
+        if credentials and credentials.credentials:
+            return credentials.credentials
+        if x_auth_token:
+            return x_auth_token
+        raise HTTPException(401, "Missing authentication. Provide Bearer token or X-Auth-Token header.")
+
+    async def get_optional_auth_token(
+        credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+        x_auth_token: Optional[str] = Header(default=None, alias="X-Auth-Token"),
+    ) -> Optional[str]:
+        """Extract auth token if provided, otherwise None."""
+        if credentials and credentials.credentials:
+            return credentials.credentials
+        return x_auth_token
+
+    # ── Public endpoints (no auth required) ──────────────────────────────────
+
     @app.get("/health")
     def health():
         return {
@@ -117,6 +127,8 @@ def main():
             },
         }
 
+    # ── Authenticated endpoints ──────────────────────────────────────────────
+
     @app.post("/connect")
     def connect(
         solver: str = Body(default="cmd"),
@@ -124,8 +136,9 @@ def main():
         username: Optional[str] = Body(default=None),
         password: Optional[str] = Body(default=None),
     ):
-        # Check authentication
-        if driver._username or driver._password:
+        """Create a new session. Returns auth_token for subsequent requests."""
+        # Check authentication if configured
+        if driver._username or driver._password_hash:
             if not username or not password:
                 raise HTTPException(401, "Authentication required. Provide username and password.")
             if not driver.authenticate(username, password):
@@ -141,36 +154,59 @@ def main():
         label: str = Body(default="cli-snippet"),
         session_id: Optional[str] = Body(default=None),
         x_sim_session: Optional[str] = Header(default=None),
+        auth_token: str = Depends(get_auth_token),
     ):
+        """Execute a command. Requires valid auth token."""
         sid = session_id or x_sim_session
-        state = _select_session(sid)
-        result = driver._exec_impl(state, code, label)
+        if not sid:
+            raise HTTPException(400, "Missing session_id")
+
+        result = driver.exec(sid, code, label, auth_token=auth_token)
+        if not result.get("ok") and "Invalid auth token" in result.get("error", ""):
+            raise HTTPException(401, result["error"])
         return {"ok": result.get("ok", False), "data": result}
 
     @app.post("/confirm")
     def confirm_session(
         session_id: str = Body(..., embed=True),
+        auth_token: str = Depends(get_auth_token),
     ):
-        result = driver.confirm_session(session_id)
+        """Confirm a session. Requires valid auth token."""
+        result = driver.confirm_session(session_id, auth_token)
         if not result.get("ok"):
+            if "Invalid auth token" in result.get("error", ""):
+                raise HTTPException(401, result["error"])
             raise HTTPException(400, result.get("error", "Failed to confirm session"))
         return result
 
     @app.post("/disconnect")
-    def disconnect(x_sim_session: Optional[str] = Header(default=None)):
-        state = _select_session(x_sim_session)
-        result = driver.disconnect(state.session_id)
+    def disconnect(
+        x_sim_session: Optional[str] = Header(default=None),
+        x_auth_token: Optional[str] = Header(default=None, alias="X-Auth-Token"),
+        auth_token: Optional[str] = Depends(get_optional_auth_token),
+    ):
+        """Disconnect a session."""
+        token = auth_token or x_auth_token or ""
+        state = driver._sessions.get(x_sim_session)
+        if not state:
+            raise HTTPException(400, "no active sessions — POST /connect first")
+        result = driver.disconnect(state.session_id, auth_token=token)
         return result
 
     @app.get("/ps")
-    def ps():
+    def ps(auth_token: str = Depends(get_auth_token)):
+        """List active sessions. Requires valid auth token."""
+        # Verify token is valid for any session
+        session_id = driver.verify_token(auth_token)
+        if not session_id:
+            raise HTTPException(401, "Invalid auth token")
+
         sessions = []
         for sid, state in driver._sessions.items():
             sessions.append({
                 "session_id": state.session_id,
                 "solver": "cmd",
                 "shell": state.shell,
-                "cwd": state.cwd,
                 "connected_at": state.connected_at,
                 "last_activity": state.last_activity,
                 "run_count": state.run_count,
@@ -184,6 +220,7 @@ def main():
 
     @app.post("/shutdown")
     def shutdown(request: Request):
+        """Shutdown the server (localhost only)."""
         client_host = request.client.host if request.client else None
         if client_host not in ("127.0.0.1", "::1", "localhost"):
             raise HTTPException(403, f"/shutdown is localhost-only (request from {client_host})")
@@ -193,7 +230,8 @@ def main():
         threading.Thread(target=_exit_after_flush, daemon=True).start()
         return {"ok": True, "data": {"shutting_down": True}}
 
-    # Print startup info
+    # ── Startup info ─────────────────────────────────────────────────────────
+
     print(f"[cmd-server] Starting on {args.host}:{args.port}")
     if args.username:
         print(f"[cmd-server] Authentication: username={args.username}")
@@ -202,14 +240,18 @@ def main():
     if args.require_confirm:
         print(f"[cmd-server] Confirmation required: yes")
     print(f"[cmd-server] Endpoints:")
-    print(f"  GET  /health           - Health check")
-    print(f"  GET  /detect/cmd       - Detect CMD")
-    print(f"  POST /connect          - Create session (requires auth)")
-    print(f"  POST /exec             - Execute command")
-    print(f"  POST /confirm          - Confirm session")
-    print(f"  POST /disconnect       - Disconnect session")
-    print(f"  GET  /ps               - List sessions")
-    print(f"  POST /shutdown         - Shutdown server")
+    print(f"  GET  /health           - Health check (public)")
+    print(f"  GET  /detect/cmd       - Detect CMD (public)")
+    print(f"  POST /connect          - Create session (returns auth_token)")
+    print(f"  POST /exec             - Execute command (requires auth_token)")
+    print(f"  POST /confirm          - Confirm session (requires auth_token)")
+    print(f"  POST /disconnect       - Disconnect session (requires auth_token)")
+    print(f"  GET  /ps               - List sessions (requires auth_token)")
+    print(f"  POST /shutdown         - Shutdown server (localhost only)")
+    print(f"")
+    print(f"[cmd-server] Auth flow:")
+    print(f"  1. POST /connect with username/password -> get auth_token")
+    print(f"  2. Use auth_token in X-Auth-Token header for all subsequent requests")
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 

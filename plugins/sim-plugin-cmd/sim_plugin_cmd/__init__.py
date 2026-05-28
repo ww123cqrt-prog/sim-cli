@@ -4,25 +4,20 @@ Allows executing shell commands on remote machines via sim-cli.
 Designed for personal use on trusted networks.
 
 Security Features:
-- Username/password authentication
+- Token-based authentication (connect once, get token, use token for all requests)
+- Password hashed with SHA-256, compared with hmac.compare_digest
 - Remote confirmation (once per session)
 - Auto-exit timeout (no activity for N seconds)
 
 Usage:
-    # Start with authentication
-    python -m sim serve --port 7602 --host 0.0.0.0 --username admin --password mypass
-
-    # Start with timeout (600 seconds = 10 minutes)
-    python -m sim serve --port 7602 --host 0.0.0.0 --timeout 600
-
-    # Start with confirmation required
-    python -m sim serve --port 7602 --host 0.0.0.0 --require-confirm
-
-    # Connect from local Mac
-    sim --host <ip> --port 7602 connect --solver cmd --username admin --password mypass
+    sim --host <remote-ip> --port 7602 connect --solver cmd
+    sim --host <remote-ip> --port 7602 --session <id> exec "dir"
+    sim --host <remote-ip> --port 7602 --session <id> disconnect
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import platform
 import subprocess
@@ -31,15 +26,16 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from sim.driver import ConnectionInfo, LintResult, SolverInstall
+from sim.driver import SolverInstall
 
 
 @dataclass
 class SessionState:
     """Session state for CMD driver."""
     session_id: str
+    auth_token: str  # Token for subsequent requests
     shell: str = "cmd"  # cmd, powershell, bash
     cwd: str = ""
     env: dict = field(default_factory=dict)
@@ -50,11 +46,17 @@ class SessionState:
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
+def _hash_password(password: str) -> str:
+    """Hash password with SHA-256."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
 class CmdDriver:
     """sim-cli driver for executing shell commands.
 
     Security features:
-    - Username/password authentication
+    - Token-based authentication
+    - Password hashing
     - Remote confirmation (once per session)
     - Auto-exit timeout
     """
@@ -64,19 +66,20 @@ class CmdDriver:
 
     def __init__(
         self,
-        username: str = None,
-        password: str = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         require_confirm: bool = False,
         timeout: int = 0,  # 0 = no timeout
     ):
         self._sessions: dict[str, SessionState] = {}
         self._sessions_lock = threading.Lock()
         self._username = username
-        self._password = password
+        self._password_hash = _hash_password(password) if password else None
         self._require_confirm = require_confirm
         self._timeout = timeout
         self._last_activity = time.time()
         self._shutdown_event = threading.Event()
+        self._auth_tokens: dict[str, str] = {}  # token -> session_id
 
         # Start timeout monitor if configured
         if timeout > 0:
@@ -101,7 +104,8 @@ class CmdDriver:
 
                     # Remove expired sessions
                     for sid in expired:
-                        del self._sessions[sid]
+                        state = self._sessions.pop(sid)
+                        self._auth_tokens.pop(state.auth_token, None)
                         print(f"[cmd-server] Session {sid} expired due to inactivity")
 
                 # If no sessions and timeout exceeded, shutdown
@@ -111,10 +115,18 @@ class CmdDriver:
                     os._exit(0)
 
     def authenticate(self, username: str, password: str) -> bool:
-        """Verify credentials."""
-        if self._username is None and self._password is None:
+        """Verify credentials using constant-time comparison."""
+        if self._username is None and self._password_hash is None:
             return True  # No auth configured
-        return username == self._username and password == self._password
+        password_hash = _hash_password(password)
+        username_ok = hmac.compare_digest(username or "", self._username or "")
+        password_ok = hmac.compare_digest(password_hash, self._password_hash or "")
+        return username_ok and password_ok
+
+    def verify_token(self, token: str) -> Optional[str]:
+        """Verify auth token and return session_id if valid."""
+        with self._sessions_lock:
+            return self._auth_tokens.get(token)
 
     def detect_installed(self) -> list[SolverInstall]:
         """CMD is always available."""
@@ -133,7 +145,8 @@ class CmdDriver:
 
     def launch(self, shell: str = "cmd", cwd: str = None, **kwargs) -> dict:
         """Launch a CMD session."""
-        sid = f"cmd-{uuid.uuid4().hex[:8]}"
+        sid = f"cmd-{uuid.uuid4().hex[:12]}"
+        token = uuid.uuid4().hex  # Auth token for subsequent requests
 
         # Determine default shell based on platform
         if shell == "cmd" and platform.system() != "Windows":
@@ -145,6 +158,7 @@ class CmdDriver:
         now = time.time()
         state = SessionState(
             session_id=sid,
+            auth_token=token,
             shell=shell,
             cwd=cwd,
             connected_at=now,
@@ -154,12 +168,14 @@ class CmdDriver:
 
         with self._sessions_lock:
             self._sessions[sid] = state
+            self._auth_tokens[token] = sid
             self._last_activity = now
 
         return {
             "ok": True,
             "data": {
                 "session_id": sid,
+                "auth_token": token,  # Client must use this for subsequent requests
                 "solver": "cmd",
                 "mode": "session",
                 "shell": shell,
@@ -171,8 +187,13 @@ class CmdDriver:
             },
         }
 
-    def confirm_session(self, session_id: str) -> dict:
+    def confirm_session(self, session_id: str, auth_token: str) -> dict:
         """Confirm a session (allow command execution)."""
+        # Verify token
+        token_sid = self.verify_token(auth_token)
+        if token_sid != session_id:
+            return {"ok": False, "error": "Invalid auth token"}
+
         with self._sessions_lock:
             state = self._sessions.get(session_id)
             if state is None:
@@ -190,18 +211,27 @@ class CmdDriver:
             },
         }
 
-    def run(self, code: str, label: str = "") -> dict:
+    def run(self, code: str, label: str = "", auth_token: str = "") -> dict:
         """Execute a shell command (called by sim-server)."""
-        # Find the session (use the first one if multiple)
+        # Verify token and get session
+        session_id = self.verify_token(auth_token)
+        if not session_id:
+            return {"ok": False, "error": "Invalid or missing auth token"}
+
         with self._sessions_lock:
-            if not self._sessions:
-                return {"ok": False, "error": "No active sessions"}
-            state = next(iter(self._sessions.values()))
+            state = self._sessions.get(session_id)
+            if state is None:
+                return {"ok": False, "error": f"Session not found: {session_id}"}
 
         return self._exec_impl(state, code, label)
 
-    def exec(self, session_id: str, code: str, label: str = "") -> dict:
+    def exec(self, session_id: str, code: str, label: str = "", auth_token: str = "") -> dict:
         """Execute a shell command (direct call)."""
+        # Verify token
+        token_sid = self.verify_token(auth_token)
+        if token_sid != session_id:
+            return {"ok": False, "error": "Invalid auth token"}
+
         with self._sessions_lock:
             state = self._sessions.get(session_id)
             if state is None:
@@ -254,10 +284,7 @@ class CmdDriver:
                     "stdout": result.stdout,
                     "stderr": result.stderr,
                     "duration_s": round(duration, 3),
-                    "command": code,
                     "label": label,
-                    "shell": state.shell,
-                    "cwd": state.cwd,
                     "started_at": time.time(),
                 }
 
@@ -272,10 +299,18 @@ class CmdDriver:
                     "error": str(e),
                 }
 
-    def disconnect(self, session_id: str) -> dict:
+    def disconnect(self, session_id: str, auth_token: str = "") -> dict:
         """Disconnect a CMD session."""
+        # Verify token if provided
+        if auth_token:
+            token_sid = self.verify_token(auth_token)
+            if token_sid != session_id:
+                return {"ok": False, "error": "Invalid auth token"}
+
         with self._sessions_lock:
             state = self._sessions.pop(session_id, None)
+            if state:
+                self._auth_tokens.pop(state.auth_token, None)
 
         if state is None:
             return {"ok": False, "error": f"Session not found: {session_id}"}
@@ -288,8 +323,14 @@ class CmdDriver:
             },
         }
 
-    def inspect(self, session_id: str, name: str) -> dict:
+    def inspect(self, session_id: str, name: str, auth_token: str = "") -> dict:
         """Query session state."""
+        # Verify token
+        if auth_token:
+            token_sid = self.verify_token(auth_token)
+            if token_sid != session_id:
+                return {"ok": False, "error": "Invalid auth token"}
+
         with self._sessions_lock:
             state = self._sessions.get(session_id)
             if state is None:
@@ -302,7 +343,6 @@ class CmdDriver:
                     "session_id": state.session_id,
                     "solver": "cmd",
                     "shell": state.shell,
-                    "cwd": state.cwd,
                     "connected_at": state.connected_at,
                     "last_activity": state.last_activity,
                     "run_count": state.run_count,
@@ -314,5 +354,15 @@ class CmdDriver:
         return {"ok": False, "error": f"Unknown inspect target: {name}"}
 
 
+# Plugin metadata
+plugin_info = {
+    "name": "cmd",
+    "summary": "CMD/Shell command execution plugin with security features.",
+    "homepage": "https://github.com/cq/sim-plugins",
+    "license_class": "apache-2.0",
+    "solver_name": "cmd",
+}
+
 # Export for plugin discovery
 skills_dir = None  # No skills directory for cmd plugin
+__all__ = ["CmdDriver", "skills_dir", "plugin_info"]

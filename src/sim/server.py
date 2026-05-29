@@ -69,6 +69,29 @@ class _NaNSafeJSONResponse(JSONResponse):
 app = FastAPI(title="sim", version="0.2.0", default_response_class=_NaNSafeJSONResponse)
 
 
+@app.get("/")
+async def root():
+    """Return available endpoints and server status."""
+    return {
+        "name": "sim serve",
+        "version": "0.2.0",
+        "description": "HTTP server for simulation sessions",
+        "endpoints": {
+            "GET /": "This help message",
+            "GET /version": "Server version",
+            "GET /detect/{solver}": "Detect solver installation",
+            "GET /ps": "List active sessions",
+            "GET /inspect/{name}": "Query session state",
+            "GET /screenshot": "Capture desktop screenshot",
+            "POST /connect": "Connect to solver",
+            "POST /exec": "Execute code snippet",
+            "POST /run": "Run script (one-shot)",
+            "POST /disconnect": "Disconnect session",
+            "POST /shutdown": "Shutdown server",
+        },
+    }
+
+
 # ── Request models ───────────────────────────────────────────────────────────
 
 class ConnectRequest(BaseModel):

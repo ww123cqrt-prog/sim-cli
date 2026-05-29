@@ -40,6 +40,17 @@ def main():
     parser.add_argument("--require-confirm", action="store_true", help="Require confirmation before executing commands")
     args = parser.parse_args()
 
+    # Security warnings
+    if not args.username or not args.password:
+        print("WARNING: No username/password set. Anyone can connect!")
+        print("  Add --username <user> --password <pass> for security.")
+    if args.timeout == 0:
+        print("WARNING: No timeout set. Session never auto-disconnects!")
+        print("  Add --timeout 600 for 10-minute inactivity timeout.")
+    if not args.require_confirm:
+        print("WARNING: No confirmation required. Commands execute immediately!")
+        print("  Add --require-confirm for human approval before execution.")
+
     # Import uvicorn here to avoid import errors
     try:
         import uvicorn

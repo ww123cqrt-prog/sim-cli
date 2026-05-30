@@ -27,6 +27,12 @@ def max_upload_bytes() -> int:
 
 def workspace_root() -> Path:
     """Return the server-local workspace root, creating it if needed."""
+    direct_root = os.environ.get("SIM_WORKSPACE_ROOT")
+    if direct_root:
+        root = Path(direct_root)
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
     sim_dir = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
     root = sim_dir / "workspace"
     root.mkdir(parents=True, exist_ok=True)

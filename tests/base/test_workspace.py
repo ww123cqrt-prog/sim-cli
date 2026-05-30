@@ -15,6 +15,17 @@ def test_workspace_root_defaults_under_sim_dir(tmp_path, monkeypatch):
     assert root.is_dir()
 
 
+def test_workspace_root_can_be_overridden_directly(tmp_path, monkeypatch):
+    monkeypatch.setenv("SIM_WORKSPACE_ROOT", str(tmp_path / "transfer-root"))
+
+    from sim.workspace import workspace_root
+
+    root = workspace_root()
+
+    assert root == tmp_path / "transfer-root"
+    assert root.is_dir()
+
+
 @pytest.mark.parametrize(
     "remote_path",
     [

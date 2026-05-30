@@ -538,6 +538,20 @@ def _parse_driver_options(items: tuple[str, ...]) -> dict:
     return parsed
 
 
+def _parse_asset_spec(spec: str) -> tuple[Path, str]:
+    """Parse LOCAL or LOCAL=REMOTE asset specs for ``sim exec --asset``."""
+    if "=" in spec:
+        local_raw, remote = spec.split("=", 1)
+        if not local_raw or not remote:
+            raise click.BadParameter(
+                f"{spec!r} must be LOCAL or LOCAL=REMOTE",
+                param_hint="--asset",
+            )
+        return Path(local_raw), remote
+    local = Path(spec)
+    return local, f"assets/{local.name}"
+
+
 # ── connect (persistent session) ────────────────────────────────────────────
 
 @main.command()
@@ -592,8 +606,12 @@ def connect(ctx, solver, mode, ui_mode, processors, workspace, driver_options):
 @click.argument("code", required=False)
 @click.option("--file", "code_file", type=click.Path(exists=True), help="Read code from file.")
 @click.option("--label", default="cli-snippet", help="Label for this execution.")
+@click.option("--asset", "assets", multiple=True,
+              help="Upload LOCAL or LOCAL=REMOTE into the workspace before execution. Repeat as needed.")
+@click.option("--overwrite-assets", is_flag=True,
+              help="Replace remote asset files if they already exist.")
 @click.pass_context
-def exec_cmd(ctx, code, code_file, label):
+def exec_cmd(ctx, code, code_file, label, assets, overwrite_assets):
     """Execute a code snippet in the live session."""
     if code_file:
         code = Path(code_file).read_text(encoding="utf-8")
@@ -604,11 +622,38 @@ def exec_cmd(ctx, code, code_file, label):
     from sim.session import SessionClient
     client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
+
+    uploaded_assets: list[dict] = []
+    for spec in assets:
+        try:
+            local_path, remote_path = _parse_asset_spec(spec)
+        except click.BadParameter as exc:
+            raise click.ClickException(str(exc)) from exc
+        upload = client.put(local_path, remote_path, overwrite=overwrite_assets)
+        if not upload.get("ok"):
+            if ctx.obj["json"]:
+                click.echo(json_mod.dumps(upload, indent=2, default=str))
+            else:
+                click.echo(f"[sim] error: asset upload failed for {local_path}: {upload.get('error')}", err=True)
+            sys.exit(1)
+        uploaded_assets.append({
+            "local_path": str(local_path),
+            "remote_path": remote_path,
+            "size": (upload.get("data") or {}).get("size", 0),
+        })
+
     result = client.run(code=code, label=label)
+    if uploaded_assets:
+        result.setdefault("assets", uploaded_assets)
 
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2, default=str))
     else:
+        for asset in uploaded_assets:
+            click.echo(
+                f"  asset uploaded: {asset['local_path']} -> "
+                f"remote:{asset['remote_path']} ({asset['size']} bytes)"
+            )
         data = result.get("data", {})
         ok = data.get("ok", False)
         status = "OK" if ok else "FAIL"

@@ -57,6 +57,8 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
          "summary": "Run a snippet in the active session."},
         {"cmd": "sim exec --file snippet.py",
          "summary": "Run a file's contents in the active session."},
+        {"cmd": "sim exec --file build.lsf --asset structure.gds=input/structure.gds",
+         "summary": "Upload an input file before running the script."},
     ],
     "inspect": [
         {"cmd": "sim inspect session.summary",

@@ -230,3 +230,119 @@ def test_cli_put_get_ls_rm_roundtrip(tmp_path, monkeypatch):
     rm_result = runner.invoke(main, ["rm", "inputs/local.txt"])
     assert rm_result.exit_code == 0, rm_result.output
     assert "deleted" in rm_result.output
+
+
+def test_cli_exec_asset_uploads_before_running(tmp_path, monkeypatch):
+    monkeypatch.setenv("SIM_DIR", str(tmp_path / ".sim"))
+
+    from sim.cli import main
+
+    calls = []
+
+    class FakeSessionClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def put(self, local_path, remote_path, *, overwrite=False):
+            calls.append(("put", str(local_path), remote_path, overwrite))
+            return {"ok": True, "data": {"path": remote_path, "size": 5}}
+
+        def run(self, code, label="cli-snippet"):
+            calls.append(("run", code, label))
+            return {"ok": True, "data": {"ok": True, "elapsed_s": 0, "stdout": "ran\n"}}
+
+    monkeypatch.setattr("sim.session.SessionClient", FakeSessionClient)
+    script = tmp_path / "build.lsf"
+    script.write_text('?"run";\n', encoding="utf-8")
+    asset = tmp_path / "structure.gds"
+    asset.write_bytes(b"gds")
+
+    from click.testing import CliRunner
+
+    result = CliRunner().invoke(main, [
+        "exec",
+        "--file", str(script),
+        "--asset", str(asset),
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        ("put", str(asset), "assets/structure.gds", False),
+        ("run", '?"run";\n', "cli-snippet"),
+    ]
+    assert "asset uploaded" in result.output
+
+
+def test_cli_exec_asset_supports_explicit_remote_and_overwrite(tmp_path, monkeypatch):
+    from sim.cli import main
+
+    calls = []
+
+    class FakeSessionClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def put(self, local_path, remote_path, *, overwrite=False):
+            calls.append(("put", str(local_path), remote_path, overwrite))
+            return {"ok": True, "data": {"path": remote_path, "size": 5}}
+
+        def run(self, code, label="cli-snippet"):
+            calls.append(("run", code, label))
+            return {"ok": True, "data": {"ok": True, "elapsed_s": 0}}
+
+    monkeypatch.setattr("sim.session.SessionClient", FakeSessionClient)
+    script = tmp_path / "build.py"
+    script.write_text("print('run')\n", encoding="utf-8")
+    asset = tmp_path / "n_profile.txt"
+    asset.write_text("x n\n", encoding="utf-8")
+
+    from click.testing import CliRunner
+
+    result = CliRunner().invoke(main, [
+        "exec",
+        "--file", str(script),
+        "--asset", f"{asset}=input/n_profile.txt",
+        "--overwrite-assets",
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        ("put", str(asset), "input/n_profile.txt", True),
+        ("run", "print('run')\n", "cli-snippet"),
+    ]
+
+
+def test_cli_exec_asset_failure_stops_before_run(tmp_path, monkeypatch):
+    from sim.cli import main
+
+    calls = []
+
+    class FakeSessionClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def put(self, local_path, remote_path, *, overwrite=False):
+            calls.append(("put", str(local_path), remote_path, overwrite))
+            return {"ok": False, "error": "file already exists"}
+
+        def run(self, code, label="cli-snippet"):
+            calls.append(("run", code, label))
+            return {"ok": True, "data": {"ok": True, "elapsed_s": 0}}
+
+    monkeypatch.setattr("sim.session.SessionClient", FakeSessionClient)
+    script = tmp_path / "build.py"
+    script.write_text("print('run')\n", encoding="utf-8")
+    asset = tmp_path / "input.gds"
+    asset.write_bytes(b"gds")
+
+    from click.testing import CliRunner
+
+    result = CliRunner().invoke(main, [
+        "exec",
+        "--file", str(script),
+        "--asset", str(asset),
+    ])
+
+    assert result.exit_code == 1
+    assert "asset upload failed" in result.output
+    assert calls == [("put", str(asset), "assets/input.gds", False)]

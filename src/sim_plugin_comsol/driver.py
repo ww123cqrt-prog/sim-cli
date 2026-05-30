@@ -627,26 +627,68 @@ class ComsolDriver:
             return installs[0].path
         raise RuntimeError("no COMSOL installation detected; set COMSOL_ROOT")
 
+    @staticmethod
+    def _comsol_platform_bin(comsol_root: str) -> tuple[str, str]:
+        """Return (bin_dir, platform) for the current OS.
+
+        On Windows the bin directory is ``bin/win64``; on macOS arm64 it is
+        ``bin/macarm64`` (or ``bin/maci64`` for Intel); on Linux it is
+        ``bin/glnxa64``.
+        """
+        if sys.platform == "win32":
+            return os.path.join(comsol_root, "bin", "win64"), "win64"
+        if sys.platform == "darwin":
+            import platform as _plat
+            if _plat.machine() == "arm64":
+                return os.path.join(comsol_root, "bin", "macarm64"), "macarm64"
+            return os.path.join(comsol_root, "bin", "maci64"), "maci64"
+        return os.path.join(comsol_root, "bin", "glnxa64"), "glnxa64"
+
+    @staticmethod
+    def _comsol_jvm_path(comsol_root: str) -> str:
+        """Return the path to the COMSOL-bundled JVM shared library."""
+        if sys.platform == "win32":
+            return os.path.join(comsol_root, "java", "win64", "jre",
+                                "bin", "server", "jvm.dll")
+        if sys.platform == "darwin":
+            import platform as _plat
+            arch = "macarm64" if _plat.machine() == "arm64" else "maci64"
+            return os.path.join(comsol_root, "java", arch, "jre",
+                                "Contents", "Home", "lib", "server",
+                                "libjvm.dylib")
+        return os.path.join(comsol_root, "java", "glnxa64", "jre",
+                            "lib", "server", "libjvm.so")
+
+    @staticmethod
+    def _comsol_lib_dir(comsol_root: str) -> str:
+        """Return the platform-specific library directory."""
+        if sys.platform == "win32":
+            return os.path.join(comsol_root, "lib", "win64")
+        if sys.platform == "darwin":
+            import platform as _plat
+            arch = "macarm64" if _plat.machine() == "arm64" else "maci64"
+            return os.path.join(comsol_root, "lib", arch)
+        return os.path.join(comsol_root, "lib", "glnxa64")
+
     def _start_jvm(self, comsol_root: str) -> None:
         if self._jvm_started:
             return
         import jpype
         import jpype.imports  # enables `from com.comsol...` Java-as-Python imports
-        jre_path = os.path.join(comsol_root, "java", "win64", "jre")
         plugins_dir = os.path.join(comsol_root, "plugins")
-        lib_dir = os.path.join(comsol_root, "lib", "win64")
+        lib_dir = self._comsol_lib_dir(comsol_root)
 
         jars = glob.glob(os.path.join(plugins_dir, "*.jar"))
         if not jars:
             raise RuntimeError(f"No COMSOL jars found in {plugins_dir}")
 
         classpath = os.pathsep.join(jars)
-        jvm_dll = os.path.join(jre_path, "bin", "server", "jvm.dll")
-        if not os.path.isfile(jvm_dll):
-            raise RuntimeError(f"JVM not found at {jvm_dll}")
+        jvm_lib = self._comsol_jvm_path(comsol_root)
+        if not os.path.isfile(jvm_lib):
+            raise RuntimeError(f"JVM not found at {jvm_lib}")
 
         jpype.startJVM(
-            jvm_dll,
+            jvm_lib,
             f"-Djava.class.path={classpath}",
             f"-Dcs.root={comsol_root}",
             f"-Djava.library.path={lib_dir}",
@@ -1003,19 +1045,18 @@ class ComsolDriver:
     ) -> None:
         import subprocess
 
-        client_exe = os.path.join(bin_dir, "comsol.exe")
-        if not os.path.isfile(client_exe):
-            raise RuntimeError(f"COMSOL Desktop launcher not found at {client_exe}")
+        if sys.platform == "win32":
+            client_exe = os.path.join(bin_dir, "comsol.exe")
+            if not os.path.isfile(client_exe):
+                raise RuntimeError(f"COMSOL Desktop launcher not found at {client_exe}")
+            client_args = [client_exe, "mphclient", "-host", host, "-port", str(self._port)]
+        else:
+            client_exe = os.path.join(bin_dir, "comsol")
+            if not os.path.isfile(client_exe):
+                raise RuntimeError(f"COMSOL launcher not found at {client_exe}")
+            client_args = [client_exe, "mphclient", "-host", host, "-port", str(self._port)]
 
         self._client_log_path, self._client_log_handle = self._open_log("comsol-mphclient")
-        client_args = [
-            client_exe,
-            "mphclient",
-            "-host",
-            host,
-            "-port",
-            str(self._port),
-        ]
         self._client_proc = subprocess.Popen(
             client_args,
             stdout=self._client_log_handle,
@@ -1682,11 +1723,18 @@ class ComsolDriver:
         root = self._resolve_comsol_root(comsol_root)
         user = user or os.environ.get("COMSOL_USER", "")
         password = password or os.environ.get("COMSOL_PASSWORD", "")
-        bin_dir = os.path.join(root, "bin", "win64")
-        server_exe = os.path.join(bin_dir, "comsolmphserver.exe")
+        bin_dir, platform = self._comsol_platform_bin(root)
 
-        if not os.path.isfile(server_exe):
-            raise RuntimeError(f"comsolmphserver not found at {server_exe}")
+        # On macOS/Linux, the comsol shell script handles all subcommands.
+        # On Windows, comsolmphserver.exe is a standalone binary.
+        if sys.platform == "win32":
+            server_exe = os.path.join(bin_dir, "comsolmphserver.exe")
+            if not os.path.isfile(server_exe):
+                raise RuntimeError(f"comsolmphserver not found at {server_exe}")
+        else:
+            server_exe = os.path.join(bin_dir, "comsol")
+            if not os.path.isfile(server_exe):
+                raise RuntimeError(f"comsol launcher not found at {server_exe}")
 
         self._launch_options = {
             "mode": mode,
@@ -1729,13 +1777,24 @@ class ComsolDriver:
                 raise err
 
             # -login auto: use cached credentials set via `comsolmphserver -login force`
-            server_args = [
-                server_exe,
-                "-port", str(self._port),
-                "-multi", "on",
-                "-login", "auto",
-                "-silent",
-            ]
+            if sys.platform == "win32":
+                server_args = [
+                    server_exe,
+                    "-port", str(self._port),
+                    "-multi", "on",
+                    "-login", "auto",
+                    "-silent",
+                ]
+            else:
+                # macOS/Linux: use the comsol shell script with mphserver subcommand
+                server_args = [
+                    server_exe,
+                    "mphserver",
+                    "-port", str(self._port),
+                    "-multi", "on",
+                    "-login", "auto",
+                    "-silent",
+                ]
             if effective_ui_mode == "server-graphics":
                 server_args += ["-graphics", "-3drend", "sw"]
             self._server_proc = subprocess.Popen(

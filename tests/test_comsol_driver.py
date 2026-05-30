@@ -1,4 +1,6 @@
 """Tests for the COMSOL driver — all pass without COMSOL installed."""
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -265,6 +267,51 @@ class TestConnect:
         info = driver.connect()
         assert info.status == "not_installed"
         assert info.solver == "comsol"
+
+
+class TestComsolPlatformPaths:
+    def test_windows_paths_use_win64_layout(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "win32")
+        root = "/comsol"
+
+        assert ComsolDriver._comsol_platform_bin(root) == (
+            os.path.join(root, "bin", "win64"),
+            "win64",
+        )
+        assert ComsolDriver._comsol_jvm_path(root) == os.path.join(
+            root, "java", "win64", "jre", "bin", "server", "jvm.dll",
+        )
+        assert ComsolDriver._comsol_lib_dir(root) == os.path.join(root, "lib", "win64")
+
+    def test_macos_arm_paths_use_macarm64_layout(self, monkeypatch):
+        import platform
+
+        monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr(platform, "machine", lambda: "arm64")
+        root = "/Applications/COMSOL64/Multiphysics"
+
+        assert ComsolDriver._comsol_platform_bin(root) == (
+            os.path.join(root, "bin", "macarm64"),
+            "macarm64",
+        )
+        assert ComsolDriver._comsol_jvm_path(root) == os.path.join(
+            root, "java", "macarm64", "jre", "Contents", "Home",
+            "lib", "server", "libjvm.dylib",
+        )
+        assert ComsolDriver._comsol_lib_dir(root) == os.path.join(root, "lib", "macarm64")
+
+    def test_linux_paths_use_glnxa64_layout(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "linux")
+        root = "/usr/local/comsol"
+
+        assert ComsolDriver._comsol_platform_bin(root) == (
+            os.path.join(root, "bin", "glnxa64"),
+            "glnxa64",
+        )
+        assert ComsolDriver._comsol_jvm_path(root) == os.path.join(
+            root, "java", "glnxa64", "jre", "lib", "server", "libjvm.so",
+        )
+        assert ComsolDriver._comsol_lib_dir(root) == os.path.join(root, "lib", "glnxa64")
 
 
 class TestParseOutput:

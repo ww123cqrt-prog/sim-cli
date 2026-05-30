@@ -85,6 +85,7 @@ class CmdDriver:
         self._last_activity = time.time()
         self._shutdown_event = threading.Event()
         self._auth_tokens: dict[str, str] = {}  # token -> session_id
+        self._approval_prompt_lock = threading.Lock()
 
         # Start timeout monitor if configured
         if timeout > 0:
@@ -209,6 +210,7 @@ class CmdDriver:
         if token_sid != session_id:
             return {"ok": False, "error": "Invalid auth token"}
 
+        wait_for_existing_prompt = False
         with self._sessions_lock:
             state = self._sessions.get(session_id)
             if state is None:
@@ -224,90 +226,107 @@ class CmdDriver:
                     },
                 }
 
-            state.pending_approval = True
-            state.client_info = client_info
-
-        # Print approval request to terminal
-        print("\n" + "=" * 60)
-        print(f"[APPROVAL REQUIRED] Remote connection request")
-        print(f"  Session ID: {session_id}")
-        print(f"  Client:     {client_info}")
-        print(f"  Shell:      {state.shell}")
-        print(f"  Timeout:    {timeout}s")
-        print(f"  Time:       {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 60)
-
-        # Wait for human input with timeout
-        import sys
-        import msvcrt
-
-        deadline = time.time() + timeout
-        print(f"  Approve this connection? (y/n) [{timeout}s timeout]: ", end="", flush=True)
-
-        answer = ""
-        while time.time() < deadline:
-            if msvcrt.kbhit():
-                ch = msvcrt.getwch()
-                if ch in ('\r', '\n'):
-                    print()  # newline
-                    answer = answer.strip().lower()
-                    break
-                elif ch == '\x03':  # Ctrl+C
-                    raise KeyboardInterrupt
-                elif ch == '\b':  # backspace
-                    if answer:
-                        answer = answer[:-1]
-                        print('\b \b', end='', flush=True)
-                else:
-                    answer += ch
-                    print(ch, end='', flush=True)
+            if state.pending_approval:
+                wait_for_existing_prompt = True
+                approval_event = state.approval_event
             else:
-                time.sleep(0.05)  # 50ms polling
+                state.pending_approval = True
+                state.approval_result = False
+                state.client_info = client_info
+                state.approval_event = threading.Event()
+                approval_event = state.approval_event
 
-        if answer in ('y', 'yes'):
+        if wait_for_existing_prompt:
+            approval_event.wait(timeout)
             with self._sessions_lock:
-                state.confirmed = True
-                state.pending_approval = False
-                state.last_activity = time.time()
-            state.approval_event.set()
-            print(f"  [APPROVED] Session {session_id}\n")
-            return {
-                "ok": True,
-                "data": {
-                    "session_id": session_id,
-                    "confirmed": True,
-                    "message": "Session approved by human operator.",
-                },
-            }
-        elif answer in ('n', 'no'):
-            with self._sessions_lock:
-                state.pending_approval = False
-            state.approval_event.set()
-            print(f"  [DENIED] Session {session_id}\n")
+                if state.confirmed:
+                    return {
+                        "ok": True,
+                        "data": {
+                            "session_id": session_id,
+                            "confirmed": True,
+                            "message": "Session already confirmed.",
+                        },
+                    }
             return {
                 "ok": False,
-                "error": "Connection denied by human operator.",
-            }
-        else:
-            # Timeout or invalid input
-            with self._sessions_lock:
-                state.pending_approval = False
-            state.approval_event.set()
-            print(f"\n  [DENIED] Session {session_id} (timeout or invalid input)\n")
-            return {
-                "ok": False,
-                "error": f"Approval timed out after {timeout}s.",
+                "error": "Connection approval was denied or timed out.",
             }
 
-        # Timeout or interrupt
-        with self._sessions_lock:
-            state.pending_approval = False
-        state.approval_event.set()
-        print(f"\n  [DENIED] Session {session_id} (timeout {timeout}s)\n")
-        return {
-            "ok": False,
-            "error": f"Approval timed out after {timeout}s.",
-        }
+        with self._approval_prompt_lock:
+            # Print approval request to terminal
+            print("\n" + "=" * 60)
+            print(f"[APPROVAL REQUIRED] Remote connection request")
+            print(f"  Session ID: {session_id}")
+            print(f"  Client:     {client_info}")
+            print(f"  Shell:      {state.shell}")
+            print(f"  Timeout:    {timeout}s")
+            print(f"  Time:       {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("=" * 60)
+
+            # Wait for human input with timeout
+            import msvcrt
+
+            deadline = time.time() + timeout
+            print(f"  Approve this connection? (y/n) [{timeout}s timeout]: ", end="", flush=True)
+
+            answer = ""
+            while time.time() < deadline:
+                if msvcrt.kbhit():
+                    ch = msvcrt.getwch()
+                    if ch in ('\r', '\n'):
+                        print()  # newline
+                        answer = answer.strip().lower()
+                        break
+                    elif ch == '\x03':  # Ctrl+C
+                        raise KeyboardInterrupt
+                    elif ch == '\b':  # backspace
+                        if answer:
+                            answer = answer[:-1]
+                            print('\b \b', end='', flush=True)
+                    else:
+                        answer += ch
+                        print(ch, end='', flush=True)
+                else:
+                    time.sleep(0.05)  # 50ms polling
+
+            if answer in ('y', 'yes'):
+                with self._sessions_lock:
+                    state.confirmed = True
+                    state.pending_approval = False
+                    state.approval_result = True
+                    state.last_activity = time.time()
+                state.approval_event.set()
+                print(f"  [APPROVED] Session {session_id}\n")
+                return {
+                    "ok": True,
+                    "data": {
+                        "session_id": session_id,
+                        "confirmed": True,
+                        "message": "Session approved by human operator.",
+                    },
+                }
+            elif answer in ('n', 'no'):
+                with self._sessions_lock:
+                    state.pending_approval = False
+                    state.approval_result = False
+                state.approval_event.set()
+                print(f"  [DENIED] Session {session_id}\n")
+                return {
+                    "ok": False,
+                    "error": "Connection denied by human operator.",
+                }
+            else:
+                # Timeout or invalid input
+                with self._sessions_lock:
+                    state.pending_approval = False
+                    state.approval_result = False
+                state.approval_event.set()
+                print(f"\n  [DENIED] Session {session_id} (timeout or invalid input)\n")
+                return {
+                    "ok": False,
+                    "error": f"Approval timed out after {timeout}s.",
+                }
 
     def run(self, code: str, label: str = "", auth_token: str = "") -> dict:
         """Execute a shell command (called by sim-server)."""

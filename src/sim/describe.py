@@ -77,6 +77,22 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim screenshot -o desktop.png",
          "summary": "Capture the server's desktop to a PNG file."},
     ],
+    "put": [
+        {"cmd": "sim put ./input.gds input/input.gds",
+         "summary": "Upload a local file into sim-server's transfer workspace."},
+    ],
+    "get": [
+        {"cmd": "sim get results/output.fsp ./output.fsp",
+         "summary": "Download a file from sim-server's transfer workspace."},
+    ],
+    "ls": [
+        {"cmd": "sim ls input",
+         "summary": "List files below a workspace directory."},
+    ],
+    "rm": [
+        {"cmd": "sim rm input/input.gds",
+         "summary": "Delete a file from sim-server's transfer workspace."},
+    ],
     "logs": [
         {"cmd": "sim logs --limit 20", "summary": "Show the last 20 history entries."},
     ],

@@ -225,3 +225,68 @@ class SessionClient:
 
     def screenshot(self) -> dict:
         return self._request("get", "/screenshot", timeout=30)
+
+    def ls(self, remote_path: str = ".") -> dict:
+        return self._request(
+            "get",
+            "/workspace/list",
+            timeout=30,
+            params={"path": remote_path},
+        )
+
+    def put(self, local_path: str | Path, remote_path: str, *, overwrite: bool = False) -> dict:
+        path = Path(local_path)
+        if not path.is_file():
+            return {"ok": False, "error": f"local file not found: {local_path}"}
+        try:
+            with path.open("rb") as fh:
+                files = {"file": (path.name, fh)}
+                data = {"path": remote_path, "overwrite": str(overwrite).lower()}
+                return self._request(
+                    "post",
+                    "/files/upload",
+                    timeout=CMD_TIMEOUT_S,
+                    files=files,
+                    data=data,
+                )
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def get(self, remote_path: str, local_path: str | Path) -> dict:
+        destination = Path(local_path)
+        try:
+            with _httpx_client(self._host, timeout=CMD_TIMEOUT_S) as c:
+                r = c.get(f"{self._base}/files/download", params={"path": remote_path})
+                if r.status_code >= 400:
+                    try:
+                        data = r.json()
+                        error = data.get("detail", str(data))
+                    except Exception:
+                        error = r.text
+                    return {"ok": False, "error": error}
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(r.content)
+                return {
+                    "ok": True,
+                    "data": {
+                        "remote_path": remote_path,
+                        "local_path": str(destination),
+                        "size": len(r.content),
+                    },
+                }
+        except httpx.ConnectError:
+            return {"ok": False, "error": f"cannot reach sim-server at {self._base}"}
+        except httpx.TimeoutException:
+            return {"ok": False, "error": f"request timed out after {CMD_TIMEOUT_S}s"}
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def rm(self, remote_path: str) -> dict:
+        return self._request(
+            "delete",
+            "/files/delete",
+            timeout=30,
+            params={"path": remote_path},
+        )

@@ -36,6 +36,7 @@ dependencies = [
     "uvicorn>=0.34",
     "pyyaml>=6.0", # reads driver compatibility.yaml files
     "Pillow>=10", # sim screenshot endpoint uses PIL.ImageGrab
+    "python-multipart>=0.0.20", # sim put uploads files through FastAPI multipart forms
     "lxml>=5.0", # XSD validation for FloSCRIPT lint
     "tomli>=2.0; python_version<'3.11'", # TOML parser for config.py; stdlib tomllib is 3.11+
     "psutil>=5.9; sys_platform == 'win32'", # Windows GUI inspect probes map top-level window PIDs back to process names.

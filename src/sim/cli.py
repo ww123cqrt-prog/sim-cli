@@ -808,6 +808,94 @@ def screenshot(ctx, output):
     click.echo(f"[sim] screenshot saved: {out_path} ({w}x{h})")
 
 
+# ── workspace file transfer ─────────────────────────────────────────────────
+
+@main.command()
+@click.argument("local", type=click.Path(exists=True, dir_okay=False))
+@click.argument("remote")
+@click.option("--overwrite", is_flag=True, help="Replace the remote file if it already exists.")
+@click.pass_context
+def put(ctx, local, remote, overwrite):
+    """Upload a local file into sim-server's transfer workspace."""
+    from sim.session import SessionClient
+
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
+    result = client.put(local, remote, overwrite=overwrite)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2, default=str))
+    elif result.get("ok"):
+        data = result.get("data", {})
+        click.echo(f"[sim] uploaded: {local} -> remote:{data.get('path', remote)} ({data.get('size', 0)} bytes)")
+    else:
+        click.echo(f"[sim] error: {result.get('error')}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument("remote")
+@click.argument("local", type=click.Path(dir_okay=False))
+@click.pass_context
+def get(ctx, remote, local):
+    """Download a file from sim-server's transfer workspace."""
+    from sim.session import SessionClient
+
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
+    result = client.get(remote, local)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2, default=str))
+    elif result.get("ok"):
+        data = result.get("data", {})
+        click.echo(f"[sim] downloaded: remote:{remote} -> {local} ({data.get('size', 0)} bytes)")
+    else:
+        click.echo(f"[sim] error: {result.get('error')}", err=True)
+        sys.exit(1)
+
+
+@main.command(name="ls")
+@click.argument("remote_path", default=".")
+@click.pass_context
+def ls_cmd(ctx, remote_path):
+    """List files in sim-server's transfer workspace."""
+    from sim.session import SessionClient
+
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
+    result = client.ls(remote_path)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2, default=str))
+    elif result.get("ok"):
+        files = (result.get("data") or {}).get("files", [])
+        if not files:
+            click.echo("[sim] workspace is empty")
+            return
+        for row in files:
+            click.echo(f"{row['size']:>10}  {row['path']}")
+    else:
+        click.echo(f"[sim] error: {result.get('error')}", err=True)
+        sys.exit(1)
+
+
+@main.command()
+@click.argument("remote")
+@click.pass_context
+def rm(ctx, remote):
+    """Delete a file from sim-server's transfer workspace."""
+    from sim.session import SessionClient
+
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
+    result = client.rm(remote)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2, default=str))
+    elif result.get("ok"):
+        click.echo(f"[sim] deleted: remote:{remote}")
+    else:
+        click.echo(f"[sim] error: {result.get('error')}", err=True)
+        sys.exit(1)
+
+
 # ── config ───────────────────────────────────────────────────────────────────
 
 

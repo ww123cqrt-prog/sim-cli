@@ -63,7 +63,11 @@ session was opened. On any failure, stop and report — do not silently retry.
 2. **Step-0 version/profile probe is mandatory.** After `sim connect`, call
    `sim inspect session.versions` and use the returned `profile` /
    `active_sdk_layer` / `active_solver_layer` to pick the right files in the
-   plugin skill. Before `sim run` or native one-shot execution, run the
+   plugin skill. Treat `solver_version` as active-runtime evidence only when
+   `version_source` is `active_runtime`; a detected installation is not proof
+   that the same version was launched. If the runtime version is unreported or
+   has no compatible profile, stop before applying version-specific guidance.
+   Before `sim run` or native one-shot execution, run the
    relevant probe for that path (`sim check <solver>`, plugin guidance, or the
    solver's native `--version` / license check). If a required profile is empty,
    unknown, or deprecated — **stop**.
@@ -92,6 +96,19 @@ default, which can I derive from the files in front of me?
 
 Do not start until every Category A field has an explicit value from the user.
 
+## First causal failure gate
+
+When a workflow fails, locate the first failed stage before changing the model:
+environment/license -> launch or attach -> file import -> model setup -> mesh or
+build -> solve -> postprocess/export. Preserve the first new error, the exact
+entrypoint, active version/profile, and relevant artifact identity; later errors
+may only be consequences.
+
+Run the smallest stage-specific probe that can confirm or reject one cause.
+Do not change physics, boundary conditions, mesh controls, or solver settings to
+work around an unproven environment, import, or setup failure. Retry only after
+naming the hypothesis and the evidence expected to change.
+
 ---
 
 ## Where `sim serve` runs (Windows session-context foot-gun)
@@ -113,3 +130,17 @@ ask the operator to restart `sim serve` from a desktop session. The agent
 never starts `sim serve` itself.
 
 See [`gui/SKILL.md`](gui/SKILL.md) for the full GUI actuation API.
+
+---
+
+## Long-running and multi-stage workflows
+
+Do not wait for or request a dedicated per-task primitive (a resumable-sweep
+API, an auto-coupling feature, etc.) when the generic primitives already
+suffice. Bounded `exec`/`run` calls, `session.health` / solve-progress
+inspection, and the solver's own retained project/session state are enough to
+drive a long sweep, a multi-stage build, or a staged multi-physics coupling
+yourself, one bounded step at a time. Reach for a new dedicated primitive only
+when a real session hits a generic gap (no timeout guard, no liveness check,
+no process cleanup) — not to shortcut a specific workflow that a generic loop
+already covers.

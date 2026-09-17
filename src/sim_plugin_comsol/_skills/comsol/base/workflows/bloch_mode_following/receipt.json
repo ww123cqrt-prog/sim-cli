@@ -1,0 +1,78 @@
+{
+  "schema": "sim-plugin-comsol.bloch-mode-following-base.v1",
+  "generated_at": "2026-09-17T21:24:00+08:00",
+  "comsol_version": "6.4.0.293",
+  "purpose": "Device-neutral, unsolved 3D Bloch eigenfrequency case with a visible Study Parametric Sweep and COMSOL 6.4 Mode Following.",
+  "model": {
+    "file": "COMSOL64_3D_Bloch_ModeFollowing_Base.mph",
+    "bytes": 650455,
+    "sha256": "B07C158FFA9564B5A0E0F9A2FB33D4082B6FD6391DE105C3C924005B8D6A529D",
+    "domains": 5,
+    "boundaries": 26,
+    "mesh_elements": 864,
+    "solutions_empty": true,
+    "results_empty": true
+  },
+  "study_contract": {
+    "manual_study": "std1/Eigenfrequency; set use_k_scan=0 and qx,qy",
+    "tracked_study": "stdmf/Parametric Sweep param + Eigenfrequency eig",
+    "swept_parameter": "k",
+    "parameter_list": "range(-0.1,0.025,0.1)",
+    "use_k_scan_default": 1,
+    "path_mode_default": 0,
+    "pdistrib": "off"
+  },
+  "solver_contract": {
+    "modefollowing": "on",
+    "candidate_eigenpairs": 20,
+    "stop_when_no_eigenvalue": "on",
+    "mode_following_child": "solmf/e1/mf1",
+    "eigenvalue_param_child_present": false,
+    "duplicate_sweep_owner_present": false
+  },
+  "floquet_contract": {
+    "source_to_destination": "negative face to positive face",
+    "source_destination_owner": "EWFD PeriodicCondition pcx/pcy with manual destination selection",
+    "identity_pairs_present": false,
+    "vector": "{kBx,kBy,0}",
+    "qx_definition": "kBx=2*pi*qx_active/a",
+    "qy_definition": "kBy=2*pi*qy_active/a"
+  },
+  "build": {
+    "source": "BuildBlochModeFollowingBase.java",
+    "source_sha256": "995669E72860002C0E8123E51AABC0F659C8CB5868D54BE7692859AC2728262B",
+    "geometry_and_mesh_only": true,
+    "study_or_solver_run": false
+  },
+  "verification": {
+    "source": "VerifyBlochModeFollowingBase.java",
+    "source_sha256": "25BB1ED4F88B5B66FD5B98AFC088CC4C173E13F3C1B35425D8834ED2650FE4AB",
+    "status": "PASS",
+    "sentinel": "BASE_VERIFY=PASS",
+    "fresh_process_reload": true,
+    "study_or_solver_run": false,
+    "red_regression": "An audit-only Identity pair was consumed by EWFD dcont1 in the R3 instance and failed eigensolver assembly with src2dst_pairy/incompatible source and destination meshes."
+  },
+  "gamma_regression": {
+    "source": "VerifyBlochModeFollowingGammaSolve.java",
+    "source_sha256": "163E54A010E1B5C556E0851EA53C2A02818A0A8456883E479753854ECDEC5D56",
+    "status": "PASS",
+    "sentinel": "BASE_GAMMA=PASS",
+    "identity_pairs": [],
+    "candidate_eigenpairs": 20,
+    "elapsed_seconds": 13.3114149,
+    "monitored_repeat_elapsed_seconds": 12.0859393,
+    "comsol_peak_physical_memory_gb": 1.13,
+    "comsol_peak_virtual_memory_gb": 1.23,
+    "solution_saved_to_model": false
+  },
+  "reference": {
+    "comsol_application": "Wave Optics Module/Gratings and Metamaterials/bandgap_photonic_crystal.mph",
+    "observed_layout": "Study Parametric Sweep plus Eigenfrequency Mode Following; solver ModeFollowing child; no duplicate EigenvalueParam"
+  },
+  "limitations": [
+    "The five layers and refractive indices are placeholders, not a VCSEL or PCSEL device.",
+    "The model is intentionally unsolved.",
+    "Mode Following assists continuation but does not prove physical mode identity, mesh convergence, or PML convergence."
+  ]
+}

@@ -112,11 +112,13 @@ specific behavior matters.
 | Path | What's there |
 |---|---|
 | `base/workflows/block_with_hole/` | Steady-state thermal of a heated block with a cylindrical hole. 6 numbered Python steps (`00_create_geometry.py` … `05_plot_temperature.py`). The smallest plugin-owned smoke/reference workflow for this driver. |
+| `base/workflows/bloch_mode_following/` | Unsolved five-layer COMSOL 6.4 case model with a visible Study Parametric Sweep over k, explicit Floquet source/destination boundary selections, separate top/bottom PMLs, and Mode Following; includes reproducible Java build, structural verification, and in-memory Gamma eigensolve regression sources. |
 | `base/workflows/model_review_loop.md` | Checkpoint loop for live/incremental geometry, materials, physics, mesh, study, and results work. |
 | `base/workflows/debug_failed_exec.md` | Failure and divergence triage: preserve the first causal error, inspect live state, separate singular/setup/mesh/nonlinear causes, then retry one hypothesis at a time. |
 | `base/reference/runtime_introspection.md` | Live-session inspection contract: preferred `uv run sim inspect` targets, compatibility rules, partial results, and raw Java fallbacks. |
 | `base/reference/java_api_patterns.md` | Stable Java API probing patterns: tags first, properties before `set`, selection checks, and version-safe try/except snippets. |
 | `base/reference/java_batch_patterns.md` | Read before writing `.java` for `comsolcompile`: chain-style calls, anti-patterns that fail to compile, source-property toggles (`<prop>_src`), study/sol skeleton, KPI extraction via stdout, error triage. |
+| `base/reference/bloch_mode_following.md` | Ordered Bloch-path parameter contract, the two valid COMSOL 6.4 sweep-owner layouts, explicit Floquet source/destination, Identity-pair failure boundary, PML review, and structural plus Gamma-solve verification. |
 | `base/reference/mph_file_format.md` | `.mph` is a ZIP archive — internal layout, the three `nodeType` variants (compact/solved/preview), the Global Parameter `T="33"` contract, and the stdlib `mph_inspect` reader. Read this when you need to introspect a `.mph` *without* spinning up `comsolmphserver`. |
 | `base/reference/offline_postprocessing_exports.md` | Optional pattern for COMSOL-free/Python postprocessing after a solve. Use when the user asks for reusable result artifacts, full-domain VTU field exports, CSV tables, or postprocessing without keeping COMSOL open. |
 

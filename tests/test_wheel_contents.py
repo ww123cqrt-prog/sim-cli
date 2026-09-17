@@ -41,9 +41,16 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
         "sim_plugin_comsol/_skills/comsol/doc-search/README.md",
         "sim_plugin_comsol/_skills/comsol/doc-search/src/sim_comsol_doc/cli.py",
         "sim_plugin_comsol/_skills/comsol/base/reference/java_api_patterns.md",
+        "sim_plugin_comsol/_skills/comsol/base/reference/bloch_mode_following.md",
         "sim_plugin_comsol/_skills/comsol/base/reference/runtime_introspection.md",
         "sim_plugin_comsol/_skills/comsol/base/workflows/model_review_loop.md",
         "sim_plugin_comsol/_skills/comsol/base/workflows/debug_failed_exec.md",
+        "sim_plugin_comsol/_skills/comsol/base/workflows/bloch_mode_following/README.md",
+        "sim_plugin_comsol/_skills/comsol/base/workflows/bloch_mode_following/BuildBlochModeFollowingBase.java",
+        "sim_plugin_comsol/_skills/comsol/base/workflows/bloch_mode_following/VerifyBlochModeFollowingBase.java",
+        "sim_plugin_comsol/_skills/comsol/base/workflows/bloch_mode_following/VerifyBlochModeFollowingGammaSolve.java",
+        "sim_plugin_comsol/_skills/comsol/base/workflows/bloch_mode_following/COMSOL64_3D_Bloch_ModeFollowing_Base.mph",
+        "sim_plugin_comsol/_skills/comsol/base/workflows/bloch_mode_following/receipt.json",
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"

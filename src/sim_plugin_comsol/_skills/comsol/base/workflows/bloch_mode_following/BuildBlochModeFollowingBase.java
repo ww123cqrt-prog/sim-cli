@@ -125,7 +125,8 @@ public class BuildBlochModeFollowingBase {
     m.sol("sol1").createAutoSequence("std1");
 
     m.study().create("stdmf");
-    m.study("stdmf").label("Visible k Parametric Sweep with COMSOL 6.4 Mode Following");
+    m.study("stdmf").label(
+        "EXPERIMENTAL / UNSTABLE: k sweep with COMSOL 6.4 Mode Following");
     m.study("stdmf").create("param", "Parametric");
     m.study("stdmf").feature("param").label("k sweep: M-Gamma-X/Y-M demonstration");
     m.study("stdmf").feature("param").set("pname", new String[]{"k"});
@@ -135,6 +136,8 @@ public class BuildBlochModeFollowingBase {
     m.study("stdmf").feature("param").set("sweeptype", "sparse");
     m.study("stdmf").feature("param").set("pdistrib", "off");
     m.study("stdmf").create("eig", "Eigenfrequency");
+    m.study("stdmf").feature("eig").label(
+        "Experimental Mode Following; inspect finite modes at every k");
     m.study("stdmf").feature("eig").set("neigsactive", true);
     m.study("stdmf").feature("eig").set("neigs", 20);
     m.study("stdmf").feature("eig").set("shift", "c_const/lambda_ref");
@@ -158,6 +161,8 @@ public class BuildBlochModeFollowingBase {
       mf = "mf1";
       m.sol("solmf").feature(eig).create(mf, "ModeFollowing");
     }
+    m.sol("solmf").feature(eig).feature(mf).label(
+        "EXPERIMENTAL / UNSTABLE continuation aid");
     m.sol("solmf").feature(eig).feature(mf).set("detectifcannotfollowpreviousmodes", "on");
     m.sol("solmf").feature(eig).feature(mf).set("thresholdmodefollowing", 0.01);
     m.sol("solmf").feature(eig).feature(mf).set("highsenseigdetection", "off");

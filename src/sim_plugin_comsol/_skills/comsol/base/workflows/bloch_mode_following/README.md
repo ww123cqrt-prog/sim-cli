@@ -1,5 +1,10 @@
 # COMSOL 6.4 三维 Bloch 参数扫描与 Mode Following 基础模型
 
+> **状态：Mode Following 是不稳定的实验性新功能。** 本案例保留它用于观察和
+> 学习，不把完整模式追踪作为验收目标，也不继续通过调候选数、步长或阈值强行
+> 追求“全部跟踪成功”。逐个 k 点的参数化本征频率结果是主数据；Mode Following
+> 曲线只作辅助参考，非有限或停止跟踪的分量必须标为未解析。
+
 该目录保存一个与具体器件无关的 COMSOL 案例：
 
 ```text
@@ -18,7 +23,7 @@ PML。结构层中央加入了一个 `0.46a × 0.22a`、折射率 1.5 的长方�
 在模型开发器中展开：
 
 ```text
-Study > Visible k Parametric Sweep with COMSOL 6.4 Mode Following
+Study > EXPERIMENTAL / UNSTABLE: k sweep with COMSOL 6.4 Mode Following
   Parametric Sweep: k sweep: M-Gamma-X/Y-M demonstration
   Eigenfrequency
 ```
@@ -48,7 +53,7 @@ k = range(0,0.25,3)
 保留：`path_mode=0` 是 `q=(k,0)`，`path_mode=1` 是
 `Gamma-X-M-Gamma`。
 
-研究步骤和 Eigenvalue 求解器都启用了 Mode Following。求解器下只有
+研究步骤和 Eigenvalue 求解器都启用了实验性 Mode Following。求解器下只有
 `ModeFollowing` 属性，没有再叠加 `EigenvalueParam`，因此 k 只有一个扫描
 所有者。该布局与 COMSOL 6.4 自带的 Wave Optics
 `bandgap_photonic_crystal` 示例一致。
@@ -107,4 +112,5 @@ Identity Pair。COMSOL EWFD 默认 `dcont1` 会消费这类 pair；R3 实例已�
 
 该基础模型是设置案例，不证明候选模数量、网格、PML、完整路径收敛或物理
 模式身份已经收敛。建议把直接参数扫描作为快速局部频谱入口；Mode Following
-只作为辅助身份信息，并检查每点有限跟踪模数。正式器件模型仍需单独审查。
+只作为不稳定的实验性辅助信息，并检查每点有限跟踪模数。无需为了本案例继续
+调参追求完整跟踪。正式器件模型仍需单独审查。

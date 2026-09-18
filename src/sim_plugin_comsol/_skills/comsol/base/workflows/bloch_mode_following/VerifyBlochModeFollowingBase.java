@@ -100,6 +100,8 @@ public class VerifyBlochModeFollowingBase {
     }
 
     require(has(m.study().tags(), "std1") && has(m.study().tags(), "stdmf"), "study tags");
+    require(m.study("stdmf").label().contains("EXPERIMENTAL / UNSTABLE"),
+        "Mode Following study must be visibly marked experimental and unstable");
     require(has(m.study("stdmf").feature().tags(), "param"),
         "visible Parametric Sweep study step missing");
     require("Parametric".equals(m.study("stdmf").feature("param").getType()),
@@ -124,13 +126,17 @@ public class VerifyBlochModeFollowingBase {
     require(eig != null, "Eigenvalue solver");
     require("on".equals(m.sol("solmf").feature(eig).getString("modefollowing")),
         "solver Mode Following");
-    boolean mf = false, eparam = false;
+    boolean mf = false, eparam = false, unstableLabel = false;
     for (String c : m.sol("solmf").feature(eig).feature().tags()) {
       String type = m.sol("solmf").feature(eig).feature(c).getType();
       mf |= type.equals("ModeFollowing");
+      if (type.equals("ModeFollowing"))
+        unstableLabel |= m.sol("solmf").feature(eig).feature(c).label()
+            .contains("EXPERIMENTAL / UNSTABLE");
       eparam |= type.equals("EigenvalueParam");
     }
     require(mf, "ModeFollowing solver attribute");
+    require(unstableLabel, "ModeFollowing solver node must carry unstable label");
     require(!eparam, "duplicate EigenvalueParam with outer Parametric Sweep");
     require(m.result().tags().length == 0, "result list must be empty");
     ModelUtil.remove("VerifyBlochMF");

@@ -1,12 +1,12 @@
 {
   "schema": "sim-plugin-comsol.bloch-mode-following-base.v3",
-  "generated_at": "2026-09-18T10:15:00+08:00",
+  "generated_at": "2026-09-18T10:32:00+08:00",
   "comsol_version": "6.4.0.293",
-  "purpose": "Device-neutral, unsolved 3D Bloch eigenfrequency case with dual M-Gamma-X/Y-M paths, visible Study Parametric Sweep, COMSOL 6.4 Mode Following, and an x/y-asymmetric validation motif.",
+  "purpose": "Device-neutral, unsolved 3D Bloch eigenfrequency case with dual M-Gamma-X/Y-M paths, visible Study Parametric Sweep, explicitly experimental/unstable COMSOL 6.4 Mode Following, and an x/y-asymmetric validation motif.",
   "model": {
     "file": "COMSOL64_3D_Bloch_ModeFollowing_Base.mph",
-    "bytes": 816240,
-    "sha256": "34A8AF3DB5A9B969C7A0DF113C0C608CDF2FAED235F0AC6810A2A176F76BD0D7",
+    "bytes": 816800,
+    "sha256": "04A810BC3DCF193558C4785104CA25DB07C4B1501D3D5389346928E9DBFE9709",
     "domains": 10,
     "boundaries": 52,
     "mesh_elements": 2484,
@@ -40,6 +40,9 @@
   },
   "solver_contract": {
     "modefollowing": "on",
+    "modefollowing_status": "experimental_unstable_auxiliary_only",
+    "authoritative_result": "per-k parametric eigenfrequency spectrum",
+    "completion_policy": "Do not tune candidate count, path step, or thresholds merely to force complete Mode Following. Non-finite stopped components are unresolved.",
     "candidate_eigenpairs": 20,
     "stop_when_no_eigenvalue": "on",
     "mode_following_child": "solmf/e1/mf1",
@@ -56,13 +59,13 @@
   },
   "build": {
     "source": "BuildBlochModeFollowingBase.java",
-    "source_sha256": "D719BB18AFE0917AD0ED3AC4CC3B99C35CE5D7F41D3D874788025594E23C3CD6",
+    "source_sha256": "3E6185E477C88A50EBE0FD2D430F87258FB232EA2FA2AD1B61FD6B127E692C43",
     "geometry_and_mesh_only": true,
     "study_or_solver_run": false
   },
   "structural_verification": {
     "source": "VerifyBlochModeFollowingBase.java",
-    "source_sha256": "47E22E55EBB567B97C295A6B9751E1D1013374A3DC4E6EBF7EEFB53C46C51AAC",
+    "source_sha256": "FEA72AA573303A36FB85D20C0429A4AB429B72C4B182920764F7F0EA3ACF5C17",
     "status": "PASS",
     "sentinel": "BASE_VERIFY=PASS",
     "fresh_process_reload": true,

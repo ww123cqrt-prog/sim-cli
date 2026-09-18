@@ -71,9 +71,11 @@ Solver。`VerifyBlochModeFollowingBase.java` 在新 COMSOL 进程中重新打开
 PML、网格以及空 solution/result 状态。`VerifyBlochModeFollowingGammaSolve.java`
 另行在内存运行手工 Γ 点真实矩阵组装和 20 模本征求解。
 `VerifyBlochModeFollowingDualPathSolve.java` 分别计算两次 Gamma、X 和 Y；
-`VerifyBlochModeFollowingParametricSweep.java` 则真实运行两条路径各自的
-`range(0,1,2)` 三点参数化扫描与 Mode Following。所有验证均不把解保存回基础
-MPH。
+`VerifyBlochModeFollowingParametricSweep.java` 通过 Study 层运行两条路径各自的
+`range(0,1,2)` 三点参数化扫描，并逐一核对 COMSOL 生成的
+`ParametricStore`。不能用 `solmf.runAll()` 验证参数扫描：它只计算求解器序列
+当前参数点。`VerifyBlochModeFollowingDenseConvergence.java` 另外测量正反向、
+20/30 个候选以及基础/细网格的差异。所有验证均不把解保存回基础 MPH。
 
 `pcx/pcy` 直接持有 source/destination 边界，不建立额外 `pairx/pairy`
 Identity Pair。COMSOL EWFD 默认 `dcont1` 会消费这类 pair；R3 实例已经复现
@@ -86,10 +88,23 @@ Identity Pair。COMSOL EWFD 默认 `dcont1` 会消费这类 pair；R3 实例已�
   `1.69e-14`，符合路径无关性；
 - X 与 Y 的排序频率集合最大相对差 `4.539e-3`，证明长方体柱确实打破了
   x/y 互换对称性，也证明第二条 Y 路径没有退化成 X 路径；
-- `range(0,1,2)` 的 X 路径和 Y 路径 Mode Following 参数扫描均真实通过，
-  8 个候选模的运行时间分别约 18.37 s 和 12.35 s；
-- 测试期间观测到的 COMSOL 物理/虚拟内存峰值约 1.49/1.60 GB，当前机器
-  未出现资源压力。
+- Study 层参数扫描能真实生成每个 k 点的独立结果存储；三点 smoke 会同时报告
+  请求模态数与实际有限跟踪模态数；
+- 基础网格为 37,594 自由度。13 点、每点请求20模的 X/Y 正扫分别约
+  155.89/149.50 s，反扫约147.36/152.82 s；
+- 细网格为81,282自由度，7点 X/Y 扫描约214.98/218.63 s；本轮观测峰值
+  工作集约3.75 GB，当前机器没有资源压力；
+- 数值 readiness 结论为 `PARTIAL`：20模正扫中，除起点外的12个点均有
+  Mode Following 分量停止，实际有限跟踪模数最少为1；X正反向13个公共点的
+  有限模数全部不同，Y有4个点不同；
+- 把候选数从20提高到30后，7个共享点的最近有限频率最大相对变化为
+  X `3.164%`、Y `3.214%`；基础网格到细网格为 X/Y 约 `2.048%`。
+
+因此，已经确认的是参数化扫频、双路径映射、Floquet边界和非对称案例能够实际
+求解，而且计算成本较低。尚未确认的是完整20条模式身份、候选数收敛、网格收敛
+和PML收敛。COMSOL在停止追踪某一分量时会留下非有限本征参数；后处理必须把它
+标为未解析，不能让 `NaN` 通过数值门槛。
 
 该基础模型是设置案例，不证明候选模数量、网格、PML、完整路径收敛或物理
-模式身份已经收敛。正式器件模型仍需单独审查。
+模式身份已经收敛。建议把直接参数扫描作为快速局部频谱入口；Mode Following
+只作为辅助身份信息，并检查每点有限跟踪模数。正式器件模型仍需单独审查。

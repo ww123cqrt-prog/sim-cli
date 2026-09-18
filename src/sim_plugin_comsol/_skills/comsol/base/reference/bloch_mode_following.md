@@ -36,6 +36,21 @@ joint once. A Gamma-X-M-Gamma parameterization is:
 2<=k<=3: (qx,qy)=(0.5*(3-k),0.5*(3-k))
 ```
 
+When one reusable model must expose both orthogonal routes without rotating the
+geometry, keep the same scalar `k` and add a discrete selector `path_axis`:
+
+```text
+0<=k<=1: M -> Gamma for both routes
+1<=k<=2: Gamma -> X if path_axis=0; Gamma -> Y if path_axis=1
+2<=k<=3: X/Y -> M
+```
+
+Both routes must feed the same active `(kBx,kBy,0)` vector. A list such as
+`range(0,1,2)` contains only the three high-symmetry anchors; use a smaller step
+for a band curve. Validate the selector on an x/y-asymmetric motif. A square or
+circular C4v motif has identical X and Y spectra, so agreement there cannot
+prove that the second route is wired correctly.
+
 ## 2. Make source and destination explicit
 
 For a square cell centered at the origin, a stable convention is:

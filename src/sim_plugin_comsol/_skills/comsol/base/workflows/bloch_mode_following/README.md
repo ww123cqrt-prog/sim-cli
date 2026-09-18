@@ -6,9 +6,12 @@
 COMSOL64_3D_Bloch_ModeFollowing_Base.mph
 ```
 
-模型只有五段基础结构：底部 PML、基底、结构占位层、上方介质、顶部
-PML。它用于复用参数、Floquet 周期边界、参数化扫描和 Mode Following 设置，
-不能当作任何 VCSEL/PCSEL 器件结果。
+模型包含五段纵向基础结构：底部 PML、基底、结构占位层、上方介质、顶部
+PML。结构层中央加入了一个 `0.46a × 0.22a`、折射率 1.5 的长方体测试柱，
+背景结构层折射率为 3.4。这个有意设置的 x/y 不对称结构只用于证明 X、Y
+路径确实不同，不能当作任何 VCSEL/PCSEL 器件结果。为了继续使用稳定的扫掠
+网格，一根几何分区柱贯穿五层；只有结构层中的中央分段使用测试柱折射率，
+其余分段仍使用各自宿主材料，因此物理不连续只存在于结构层。
 
 ## 模型中实际存在的扫描入口
 
@@ -16,20 +19,34 @@ PML。它用于复用参数、Floquet 周期边界、参数化扫描和 Mode Fol
 
 ```text
 Study > Visible k Parametric Sweep with COMSOL 6.4 Mode Following
-  Parametric Sweep: k sweep: -0.1 to 0.1
+  Parametric Sweep: k sweep: M-Gamma-X/Y-M demonstration
   Eigenfrequency
 ```
 
-`Parametric Sweep` 直接扫描：
+`Parametric Sweep` 默认直接扫描：
 
 ```text
-k = range(-0.1,0.025,0.1)
+k = range(0,0.25,3)
 ```
 
-全局参数默认 `use_k_scan=1`，所以直接运行该 Study 时，`k` 会通过
-`qx_scan/qy_scan` 生成 `kBx,kBy`。`path_mode=0` 是 `q=(k,0)`；改为
-`path_mode=1` 后，可把 k 列表改成 `range(0,step,3)`，得到
-Gamma-X-M-Gamma。
+全局参数默认 `use_k_scan=1`、`path_mode=2`、`path_axis=0`，所以直接运行
+该 Study 时，`k` 会通过 `qx_scan/qy_scan` 生成 `kBx,kBy`：
+
+- `path_axis=0`：`M -> Gamma -> X -> M`；
+- `path_axis=1`：`M -> Gamma -> Y -> M`。
+
+两条路径共用同一个有序标量 `k` 和同一组 Floquet 边界。分段定义为：
+
+```text
+0 <= k <= 1: M -> Gamma
+1 <= k <= 2: Gamma -> X（path_axis=0）或 Gamma -> Y（path_axis=1）
+2 <= k <= 3: X/Y -> M
+```
+
+`range(0,1,2)` 只有 M、Gamma、X/Y 三个锚点，适合快速检查，不是连续
+能带。正式绘制路径应把步长改小，例如 `range(0,0.01,3)`。历史兼容入口仍
+保留：`path_mode=0` 是 `q=(k,0)`，`path_mode=1` 是
+`Gamma-X-M-Gamma`。
 
 研究步骤和 Eigenvalue 求解器都启用了 Mode Following。求解器下只有
 `ModeFollowing` 属性，没有再叠加 `EigenvalueParam`，因此 k 只有一个扫描
@@ -50,16 +67,29 @@ qy = ...
 
 `BuildBlochModeFollowingBase.java` 只运行几何和网格构建，不运行 Study 或
 Solver。`VerifyBlochModeFollowingBase.java` 在新 COMSOL 进程中重新打开 MPH，
-检查 Study Parametric Sweep、Mode Following、Floquet 周期边界、PML、网格以及
-空 solution/result 状态。`VerifyBlochModeFollowingGammaSolve.java` 另行在内存
-运行手工 Γ 点真实矩阵组装和 20 模本征求解，但不把解保存回基础 MPH。
+检查 Study Parametric Sweep、双路径锚点、Mode Following、Floquet 周期边界、
+PML、网格以及空 solution/result 状态。`VerifyBlochModeFollowingGammaSolve.java`
+另行在内存运行手工 Γ 点真实矩阵组装和 20 模本征求解。
+`VerifyBlochModeFollowingDualPathSolve.java` 分别计算两次 Gamma、X 和 Y；
+`VerifyBlochModeFollowingParametricSweep.java` 则真实运行两条路径各自的
+`range(0,1,2)` 三点参数化扫描与 Mode Following。所有验证均不把解保存回基础
+MPH。
 
 `pcx/pcy` 直接持有 source/destination 边界，不建立额外 `pairx/pairy`
 Identity Pair。COMSOL EWFD 默认 `dcont1` 会消费这类 pair；R3 实例已经复现
 它会导致“源和目标网格不兼容”，因此不能把未使用 pair 当作被动审计元数据。
 
-2026-09-17 的 Γ 点回归输出 `BASE_GAMMA=PASS`，总用时约 13 s，COMSOL
-报告峰值物理/虚拟内存 1.13/1.23 GB。
+2026-09-18 的验证结果：
 
-该基础模型是设置案例，不证明候选模数量、网格、PML 或物理模式身份已经
-收敛。正式器件模型仍需单独审查。
+- Gamma 点 20 模回归通过，约 15.17 s；
+- 两条路径在 Gamma 点的 20 个排序频率集合最大相对差
+  `1.69e-14`，符合路径无关性；
+- X 与 Y 的排序频率集合最大相对差 `4.539e-3`，证明长方体柱确实打破了
+  x/y 互换对称性，也证明第二条 Y 路径没有退化成 X 路径；
+- `range(0,1,2)` 的 X 路径和 Y 路径 Mode Following 参数扫描均真实通过，
+  8 个候选模的运行时间分别约 18.37 s 和 12.35 s；
+- 测试期间观测到的 COMSOL 物理/虚拟内存峰值约 1.49/1.60 GB，当前机器
+  未出现资源压力。
+
+该基础模型是设置案例，不证明候选模数量、网格、PML、完整路径收敛或物理
+模式身份已经收敛。正式器件模型仍需单独审查。

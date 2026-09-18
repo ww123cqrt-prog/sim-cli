@@ -1,26 +1,42 @@
 {
-  "schema": "sim-plugin-comsol.bloch-mode-following-base.v1",
-  "generated_at": "2026-09-17T21:24:00+08:00",
+  "schema": "sim-plugin-comsol.bloch-mode-following-base.v2",
+  "generated_at": "2026-09-18T08:33:36+08:00",
   "comsol_version": "6.4.0.293",
-  "purpose": "Device-neutral, unsolved 3D Bloch eigenfrequency case with a visible Study Parametric Sweep and COMSOL 6.4 Mode Following.",
+  "purpose": "Device-neutral, unsolved 3D Bloch eigenfrequency case with dual M-Gamma-X/Y-M paths, visible Study Parametric Sweep, COMSOL 6.4 Mode Following, and an x/y-asymmetric validation motif.",
   "model": {
     "file": "COMSOL64_3D_Bloch_ModeFollowing_Base.mph",
-    "bytes": 650455,
-    "sha256": "B07C158FFA9564B5A0E0F9A2FB33D4082B6FD6391DE105C3C924005B8D6A529D",
-    "domains": 5,
-    "boundaries": 26,
-    "mesh_elements": 864,
+    "bytes": 816240,
+    "sha256": "34A8AF3DB5A9B969C7A0DF113C0C608CDF2FAED235F0AC6810A2A176F76BD0D7",
+    "domains": 10,
+    "boundaries": 52,
+    "mesh_elements": 2484,
     "solutions_empty": true,
     "results_empty": true
+  },
+  "validation_motif": {
+    "physical_structure": "0.46a by 0.22a rectangular n=1.5 pillar in the n=3.4 structure layer",
+    "mesh_partition": "The rectangular partition column crosses all five z layers for sweep-mesh compatibility; only its structure-layer segment uses n_pillar.",
+    "symmetry_purpose": "Break x/y interchange symmetry so X and Y cannot agree by C4v symmetry."
   },
   "study_contract": {
     "manual_study": "std1/Eigenfrequency; set use_k_scan=0 and qx,qy",
     "tracked_study": "stdmf/Parametric Sweep param + Eigenfrequency eig",
     "swept_parameter": "k",
-    "parameter_list": "range(-0.1,0.025,0.1)",
+    "parameter_list": "range(0,0.25,3)",
     "use_k_scan_default": 1,
-    "path_mode_default": 0,
+    "path_mode_default": 2,
+    "path_axis_default": 0,
+    "path_axis_0": "M-Gamma-X-M",
+    "path_axis_1": "M-Gamma-Y-M",
     "pdistrib": "off"
+  },
+  "path_anchors": {
+    "k_0": [0.5, 0.5],
+    "k_1": [0.0, 0.0],
+    "k_2_axis_0": [0.5, 0.0],
+    "k_2_axis_1": [0.0, 0.5],
+    "k_3": [0.5, 0.5],
+    "structural_verification": "PASS"
   },
   "solver_contract": {
     "modefollowing": "on",
@@ -40,18 +56,17 @@
   },
   "build": {
     "source": "BuildBlochModeFollowingBase.java",
-    "source_sha256": "995669E72860002C0E8123E51AABC0F659C8CB5868D54BE7692859AC2728262B",
+    "source_sha256": "D719BB18AFE0917AD0ED3AC4CC3B99C35CE5D7F41D3D874788025594E23C3CD6",
     "geometry_and_mesh_only": true,
     "study_or_solver_run": false
   },
-  "verification": {
+  "structural_verification": {
     "source": "VerifyBlochModeFollowingBase.java",
-    "source_sha256": "25BB1ED4F88B5B66FD5B98AFC088CC4C173E13F3C1B35425D8834ED2650FE4AB",
+    "source_sha256": "47E22E55EBB567B97C295A6B9751E1D1013374A3DC4E6EBF7EEFB53C46C51AAC",
     "status": "PASS",
     "sentinel": "BASE_VERIFY=PASS",
     "fresh_process_reload": true,
-    "study_or_solver_run": false,
-    "red_regression": "An audit-only Identity pair was consumed by EWFD dcont1 in the R3 instance and failed eigensolver assembly with src2dst_pairy/incompatible source and destination meshes."
+    "study_or_solver_run": false
   },
   "gamma_regression": {
     "source": "VerifyBlochModeFollowingGammaSolve.java",
@@ -60,10 +75,38 @@
     "sentinel": "BASE_GAMMA=PASS",
     "identity_pairs": [],
     "candidate_eigenpairs": 20,
-    "elapsed_seconds": 13.3114149,
-    "monitored_repeat_elapsed_seconds": 12.0859393,
-    "comsol_peak_physical_memory_gb": 1.13,
-    "comsol_peak_virtual_memory_gb": 1.23,
+    "elapsed_seconds": 15.1668389,
+    "peak_physical_memory_mb": 1297,
+    "peak_virtual_memory_mb": 1434,
+    "solution_saved_to_model": false
+  },
+  "dual_path_anchor_solve": {
+    "source": "VerifyBlochModeFollowingDualPathSolve.java",
+    "source_sha256": "6345D4464EAC5037858649C4036C152A27336D3D6A4DCFE4B28D92101A6994AC",
+    "status": "PASS",
+    "sentinel": "DUAL_PATH_SOLVE=PASS",
+    "candidate_eigenpairs": 20,
+    "gamma_axis_0_seconds": 15.0783053,
+    "gamma_axis_1_seconds": 9.0065396,
+    "x_seconds": 5.4102707,
+    "y_seconds": 6.6717049,
+    "gamma_max_relative_sorted_spectrum_difference": 1.6908679717659306e-14,
+    "xy_max_relative_sorted_spectrum_difference": 0.004539143138502983,
+    "peak_physical_memory_mb": 1457,
+    "peak_virtual_memory_mb": 1593,
+    "solution_saved_to_model": false
+  },
+  "mode_following_parametric_smoke": {
+    "source": "VerifyBlochModeFollowingParametricSweep.java",
+    "source_sha256": "1CFE4EAC17C371303F621E119E70EBE0D46F852A10D25DA849E88C103322B041",
+    "status": "PASS",
+    "sentinel": "DUAL_PATH_PARAMETRIC_SWEEP=PASS",
+    "temporary_parameter_list": "range(0,1,2)",
+    "candidate_eigenpairs": 8,
+    "axis_0_seconds": 18.3749292,
+    "axis_1_seconds": 12.3548162,
+    "peak_physical_memory_mb": 1487,
+    "peak_virtual_memory_mb": 1599,
     "solution_saved_to_model": false
   },
   "reference": {
@@ -71,8 +114,9 @@
     "observed_layout": "Study Parametric Sweep plus Eigenfrequency Mode Following; solver ModeFollowing child; no duplicate EigenvalueParam"
   },
   "limitations": [
-    "The five layers and refractive indices are placeholders, not a VCSEL or PCSEL device.",
-    "The model is intentionally unsolved.",
-    "Mode Following assists continuation but does not prove physical mode identity, mesh convergence, or PML convergence."
+    "The five layers, refractive indices, and asymmetric pillar are validation placeholders, not a VCSEL or PCSEL device.",
+    "The delivered model is intentionally unsolved.",
+    "The anchor spectra verify path wiring; they do not establish band identity or path convergence.",
+    "Mode Following assists continuation but does not prove physical mode identity, mesh convergence, candidate-count convergence, or PML convergence."
   ]
 }

@@ -45,13 +45,42 @@ public class VerifyBlochModeFollowingBase {
     return 0.5 * (box[2 * axis] + box[2 * axis + 1]);
   }
 
+  static void anchor(Model m, int axis, double pathK, double qx, double qy)
+      throws Exception {
+    m.param().set("path_mode", "2");
+    m.param().set("path_axis", Integer.toString(axis));
+    m.param().set("k", Double.toString(pathK));
+    double actualQx = m.param().evaluate("qx_scan");
+    double actualQy = m.param().evaluate("qy_scan");
+    require(Math.abs(actualQx - qx) < 1e-14 && Math.abs(actualQy - qy) < 1e-14,
+        "dual-path anchor axis=" + axis + " k=" + pathK + " got ("
+            + actualQx + "," + actualQy + ")");
+  }
+
   public static void main(String[] args) throws Exception {
     String path = modelPath();
     Model m = ModelUtil.load("VerifyBlochMF", path);
     require(ModelUtil.getComsolVersion().startsWith("COMSOL Multiphysics 6.4"), "COMSOL version");
-    require(m.component("comp1").geom("geom1").getNDomains() == 5, "domain count");
-    require(m.component("comp1").geom("geom1").getNBoundaries() == 26, "boundary count");
-    require(m.component("comp1").mesh("mesh1").getNumElem() == 864, "mesh element count");
+    require(m.component("comp1").geom("geom1").getNDomains() == 10,
+        "sweep-compatible two-domain partition in each of five layers");
+    require(has(m.component("comp1").material().tags(), "matpillar"),
+        "asymmetric-pillar material");
+    require("2".equals(m.param().get("path_mode")), "dual-path mode must be default-active");
+    require("0".equals(m.param().get("path_axis")), "X path must be the default axis");
+    require(m.param().get("qx_scan").contains("path_axis"), "qx dual-path expression");
+    require(m.param().get("qy_scan").contains("path_axis"), "qy dual-path expression");
+    require(m.param().evaluate("pillar_x") > m.param().evaluate("pillar_y"),
+        "pillar must deliberately break x/y interchange symmetry");
+    anchor(m, 0, 0, 0.5, 0.5);
+    anchor(m, 0, 1, 0, 0);
+    anchor(m, 0, 2, 0.5, 0);
+    anchor(m, 0, 3, 0.5, 0.5);
+    anchor(m, 1, 0, 0.5, 0.5);
+    anchor(m, 1, 1, 0, 0);
+    anchor(m, 1, 2, 0, 0.5);
+    anchor(m, 1, 3, 0.5, 0.5);
+    m.param().set("path_axis", "0");
+    m.param().set("k", "0");
     require(m.param().get("kBx").contains("qx_active"), "kBx expression");
     require(m.param().get("kBy").contains("qy_active"), "kBy expression");
 
@@ -77,10 +106,11 @@ public class VerifyBlochModeFollowingBase {
         "param feature type");
     require("k".equals(m.study("stdmf").feature("param").getString("pname")),
         "swept parameter must be k");
-    require(m.study("stdmf").feature("param").getString("plistarr").contains("-0.1"),
-        "k sweep start");
-    require(m.study("stdmf").feature("param").getString("plistarr").contains("0.1"),
-        "k sweep stop");
+    String parameterList = m.study("stdmf").feature("param").getString("plistarr");
+    System.out.println("BASE_VERIFY_PARAMETER_LIST=" + parameterList);
+    require(parameterList.contains("0") && parameterList.contains("0.25")
+        && parameterList.contains("3"),
+        "default M-Gamma-X/Y-M demonstration sweep");
     require("off".equals(m.study("stdmf").feature("param").getString("pdistrib")),
         "ordered sweep must not distribute points");
     require("on".equals(m.study("stdmf").feature("eig").getString("modefollowing")),

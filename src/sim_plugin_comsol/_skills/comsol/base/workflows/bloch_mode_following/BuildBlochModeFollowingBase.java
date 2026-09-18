@@ -4,7 +4,8 @@ import java.io.File;
 import java.util.*;
 
 /**
- * Build an unsolved five-layer COMSOL 6.4 Bloch/Mode-Following base model.
+ * Build an unsolved five-layer COMSOL 6.4 Bloch/Mode-Following base model
+ * with a deliberately x/y-asymmetric rectangular inclusion for path tests.
  *
  * The visible Study tree owns the k sweep through a Parametric Sweep feature.
  * Mode Following is enabled on the Eigenfrequency step and Eigenvalue solver.
@@ -36,16 +37,21 @@ public class BuildBlochModeFollowingBase {
         "t_pml_bottom+t_substrate+t_structure+t_superstrate+t_pml_top");
     m.param().set("n_bottom", "3.4", "Placeholder real substrate/PML index");
     m.param().set("n_structure", "3.4", "Placeholder real structure-layer index");
+    m.param().set("n_pillar", "1.5", "Lossless asymmetric test-pillar index");
     m.param().set("n_top", "1", "Placeholder real superstrate/PML index");
+    m.param().set("pillar_x", "0.46*a", "Asymmetric test-pillar x width");
+    m.param().set("pillar_y", "0.22*a", "Asymmetric test-pillar y width");
     m.param().set("qx", "0", "Manual reduced Bloch coordinate x; set use_k_scan=0");
     m.param().set("qy", "0", "Manual reduced Bloch coordinate y; set use_k_scan=0");
     m.param().set("k", "0", "Dimensionless ordered path coordinate");
     m.param().set("use_k_scan", "1", "1: use k path; 0: use manual qx/qy");
-    m.param().set("path_mode", "0", "0: q=(k,0); 1: Gamma-X-M-Gamma for k in [0,3]");
+    m.param().set("path_mode", "2",
+        "0: q=(k,0); 1: Gamma-X-M-Gamma; 2: M-Gamma-X/Y-M selected by path_axis");
+    m.param().set("path_axis", "0", "For path_mode=2: 0 selects X, 1 selects Y");
     m.param().set("qx_scan",
-        "if(path_mode<0.5,k,if(k<=1,0.5*k,if(k<=2,0.5,0.5*(3-k))))");
+        "if(path_mode<0.5,k,if(path_mode<1.5,if(k<=1,0.5*k,if(k<=2,0.5,0.5*(3-k))),if(k<=1,0.5*(1-k),if(k<=2,if(path_axis<0.5,0.5*(k-1),0),if(path_axis<0.5,0.5,0.5*(k-2))))))");
     m.param().set("qy_scan",
-        "if(path_mode<0.5,0,if(k<=1,0,if(k<=2,0.5*(k-1),0.5*(3-k))))");
+        "if(path_mode<0.5,0,if(path_mode<1.5,if(k<=1,0,if(k<=2,0.5*(k-1),0.5*(3-k))),if(k<=1,0.5*(1-k),if(k<=2,if(path_axis<0.5,0,0.5*(k-1)),if(path_axis<0.5,0.5*(k-2),0.5)))))");
     m.param().set("qx_active", "if(use_k_scan>0.5,qx_scan,qx)");
     m.param().set("qy_active", "if(use_k_scan>0.5,qy_scan,qy)");
     m.param().set("kBx", "2*pi*qx_active/a", "Physical Floquet wavevector x in rad/m");
@@ -121,10 +127,10 @@ public class BuildBlochModeFollowingBase {
     m.study().create("stdmf");
     m.study("stdmf").label("Visible k Parametric Sweep with COMSOL 6.4 Mode Following");
     m.study("stdmf").create("param", "Parametric");
-    m.study("stdmf").feature("param").label("k sweep: -0.1 to 0.1");
+    m.study("stdmf").feature("param").label("k sweep: M-Gamma-X/Y-M demonstration");
     m.study("stdmf").feature("param").set("pname", new String[]{"k"});
     m.study("stdmf").feature("param").set("plistarr",
-        new String[]{"range(-0.1,0.025,0.1)"});
+        new String[]{"range(0,0.25,3)"});
     m.study("stdmf").feature("param").set("punit", new String[]{""});
     m.study("stdmf").feature("param").set("sweeptype", "sparse");
     m.study("stdmf").feature("param").set("pdistrib", "off");
@@ -175,26 +181,48 @@ public class BuildBlochModeFollowingBase {
     m.component("comp1").geom("geom1").feature("stack").setIndex("layer", "t_substrate", 1);
     m.component("comp1").geom("geom1").feature("stack").setIndex("layer", "t_structure", 2);
     m.component("comp1").geom("geom1").feature("stack").setIndex("layer", "t_superstrate", 3);
+    m.component("comp1").geom("geom1").create("pillar", "Block");
+    m.component("comp1").geom("geom1").feature("pillar").label(
+        "Asymmetric rectangular validation pillar");
+    m.component("comp1").geom("geom1").feature("pillar").set("base", "center");
+    m.component("comp1").geom("geom1").feature("pillar").set("size",
+        new String[]{"pillar_x", "pillar_y", "t_total"});
+    m.component("comp1").geom("geom1").feature("pillar").set("pos",
+        new String[]{"0", "0", "0"});
     m.component("comp1").geom("geom1").run();
 
     int nd = m.component("comp1").geom("geom1").getNDomains();
-    if (nd != 5) throw new Exception("expected five domains, got " + nd);
+    // The partition column crosses the complete stack so every z layer has the
+    // same 2-D topology and remains sweep-meshable.  Only its central segment
+    // receives n_pillar; the four other inner segments keep their host index.
+    if (nd != 10) throw new Exception("expected two sweep-compatible domains per layer, got " + nd);
     List<Integer> ordered = new ArrayList<>();
     Map<Integer, Double> zmid = new HashMap<>();
+    Map<Integer, double[]> domainBoxes = new HashMap<>();
     for (int d = 1; d <= nd; d++) {
       m.component("comp1").geom("geom1").measureFinal().selection().geom(3);
       m.component("comp1").geom("geom1").measureFinal().selection().set(d);
       double[] box = m.component("comp1").geom("geom1").measureFinal().getBoundingBox();
       ordered.add(d);
       zmid.put(d, 0.5 * (box[4] + box[5]));
+      domainBoxes.put(d, box);
     }
     ordered.sort(Comparator.comparingDouble(zmid::get));
-    int dPmlBot = ordered.get(0), dSub = ordered.get(1), dStruct = ordered.get(2),
-        dSup = ordered.get(3), dPmlTop = ordered.get(4);
+    int[][] layers = new int[5][2]; // [layer][0 inner, 1 outer]
+    for (int layer = 0; layer < 5; layer++) {
+      int da = ordered.get(2 * layer), db = ordered.get(2 * layer + 1);
+      double[] ba = domainBoxes.get(da), bb = domainBoxes.get(db);
+      double areaA = (ba[1] - ba[0]) * (ba[3] - ba[2]);
+      double areaB = (bb[1] - bb[0]) * (bb[3] - bb[2]);
+      layers[layer][0] = areaA < areaB ? da : db;
+      layers[layer][1] = areaA < areaB ? db : da;
+    }
+    int dPillar = layers[2][0], dStruct = layers[2][1];
 
     m.component("comp1").material().create("matbottom", "Common");
     m.component("comp1").material("matbottom").label("Placeholder bottom medium");
-    m.component("comp1").material("matbottom").selection().set(dPmlBot, dSub);
+    m.component("comp1").material("matbottom").selection().set(
+        layers[0][0], layers[0][1], layers[1][0], layers[1][1]);
     m.component("comp1").material("matbottom").propertyGroup().create(
         "RefractiveIndex", "RefractiveIndex", "Refractive index");
     m.component("comp1").material("matbottom").propertyGroup("RefractiveIndex").set(
@@ -206,18 +234,29 @@ public class BuildBlochModeFollowingBase {
         "RefractiveIndex", "RefractiveIndex", "Refractive index");
     m.component("comp1").material("matstructure").propertyGroup("RefractiveIndex").set(
         "n", new String[]{"n_structure"});
+    m.component("comp1").material().create("matpillar", "Common");
+    m.component("comp1").material("matpillar").label(
+        "Lossless asymmetric validation pillar");
+    m.component("comp1").material("matpillar").selection().set(dPillar);
+    m.component("comp1").material("matpillar").propertyGroup().create(
+        "RefractiveIndex", "RefractiveIndex", "Refractive index");
+    m.component("comp1").material("matpillar").propertyGroup("RefractiveIndex").set(
+        "n", new String[]{"n_pillar"});
     m.component("comp1").material().create("mattop", "Common");
     m.component("comp1").material("mattop").label("Placeholder top medium");
-    m.component("comp1").material("mattop").selection().set(dSup, dPmlTop);
+    m.component("comp1").material("mattop").selection().set(
+        layers[3][0], layers[3][1], layers[4][0], layers[4][1]);
     m.component("comp1").material("mattop").propertyGroup().create(
         "RefractiveIndex", "RefractiveIndex", "Refractive index");
     m.component("comp1").material("mattop").propertyGroup("RefractiveIndex").set(
         "n", new String[]{"n_top"});
 
     m.component("comp1").coordSystem().create("pmlbot", "PML");
-    m.component("comp1").coordSystem("pmlbot").selection().set(dPmlBot);
+    m.component("comp1").coordSystem("pmlbot").selection().set(
+        layers[0][0], layers[0][1]);
     m.component("comp1").coordSystem().create("pmltop", "PML");
-    m.component("comp1").coordSystem("pmltop").selection().set(dPmlTop);
+    m.component("comp1").coordSystem("pmltop").selection().set(
+        layers[4][0], layers[4][1]);
 
     m.component("comp1").physics().create("ewfd", "ElectromagneticWavesFrequencyDomain", "geom1");
     m.component("comp1").physics("ewfd").prop("ShapeProperty").set("order_electricfield", 2);
@@ -244,8 +283,10 @@ public class BuildBlochModeFollowingBase {
     m.component("comp1").mesh("mesh1").feature("size1").set("custom", "on");
     m.component("comp1").mesh("mesh1").feature("size1").set("hmax", "a/6");
     m.component("comp1").mesh("mesh1").feature("size1").set("hmin", "a/30");
-    m.component("comp1").mesh("mesh1").create("map1", "Map");
-    m.component("comp1").mesh("mesh1").feature("map1").selection().set(ids(bottomFaces));
+    m.component("comp1").mesh("mesh1").create("ftri1", "FreeTri");
+    m.component("comp1").mesh("mesh1").feature("ftri1").label(
+        "Free triangular source mesh for sweep-compatible column");
+    m.component("comp1").mesh("mesh1").feature("ftri1").selection().set(ids(bottomFaces));
     m.component("comp1").mesh("mesh1").create("swe1", "Sweep");
     m.component("comp1").mesh("mesh1").feature("swe1").selection().geom(3);
     m.component("comp1").mesh("mesh1").feature("swe1").selection().all();

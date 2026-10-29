@@ -135,3 +135,35 @@ def test_one_shot_rejects_success_without_run_result(tmp_path):
     driver.client._client=httpx.Client(transport=httpx.MockTransport(lambda req:httpx.Response(200,json={'ok':True})))
     script=tmp_path/'input.lsf';script.write_text('x=1;')
     assert not driver.run_file(script).ok
+
+
+def test_exec_keeps_backend_error_diagnostics(backend):
+    driver=controlled(LumericalFDTDDriver,backend);assert driver.launch()['ok']
+    driver.client._client=httpx.Client(transport=httpx.MockTransport(lambda req:httpx.Response(200,json={
+        'ok':False,'data':{'stdout':'before failure','stderr':'line 3: undefined variable','errors':['line 3: undefined variable']}})))
+    result=driver.run('missing;')
+    assert result['ok'] is False
+    assert result['stdout']=='before failure'
+    assert result['stderr']=='line 3: undefined variable'
+    assert result['errors']==['line 3: undefined variable']
+
+
+def test_core_disconnect_failure_is_retryable(backend,monkeypatch):
+    from sim import drivers,server
+    driver=controlled(LumericalFDTDDriver,backend)
+    monkeypatch.setattr(drivers,'get_driver',lambda name:driver)
+    with TestClient(server.app) as api:
+        opened=api.post('/connect',json={'solver':driver.name,'ui_mode':'no_gui'});sid=opened.json()['data']['session_id']
+        try:
+            driver.client._client=httpx.Client(transport=httpx.MockTransport(lambda req:httpx.Response(503,json={'detail':'temporarily unavailable'})))
+            failed=api.post('/disconnect',headers={'X-Sim-Session':sid})
+            assert failed.status_code==500
+            assert sid in server._sessions
+            driver.client._client=httpx.Client(transport=httpx.MockTransport(lambda req:httpx.Response(404,json={'detail':'unknown session_id: '+sid})))
+            assert api.post('/disconnect',headers={'X-Sim-Session':sid}).status_code==200
+            assert sid not in server._sessions and driver._session_id is None
+            driver.client._client=httpx.Client(transport=backend[0])
+            assert api.post('/connect',json={'solver':driver.name,'ui_mode':'no_gui'}).status_code==200
+            assert api.post('/disconnect',headers={'X-Sim-Session':sid}).status_code==200
+        finally:
+            server._sessions.pop(sid,None)

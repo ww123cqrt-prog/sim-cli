@@ -718,14 +718,20 @@ def screenshot():
 
 def _teardown_session(session_id: str) -> str | None:
     """Best-effort: tear down one session by id. Returns the id torn down, or None."""
-    state = _drop_session(session_id)
+    with _sessions_lock:
+        state = _sessions.get(session_id)
     if state is None:
         return None
-    if state.driver is not None:
-        try:
-            state.driver.disconnect()
-        except Exception:
-            pass
+    with state.lock:
+        if state.driver is not None:
+            try:
+                result = state.driver.disconnect()
+            except Exception as exc:
+                raise HTTPException(500, f"disconnect failed; session retained: {exc}") from exc
+            if isinstance(result, dict) and result.get("ok") is False:
+                reason = result.get("message") or result.get("error") or result.get("stderr") or "backend rejected disconnect"
+                raise HTTPException(500, f"disconnect failed; session retained: {reason}")
+        _drop_session(session_id)
     return state.session_id
 
 

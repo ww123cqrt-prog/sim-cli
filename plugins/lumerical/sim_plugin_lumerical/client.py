@@ -71,7 +71,7 @@ class LumericalClient:
             return response.json()
         except httpx.HTTPStatusError as e:
             log.error("HTTP error %s: %s", e.response.status_code, e.response.text)
-            return {"ok": False, "error": f"HTTP {e.response.status_code}: {e.response.text}"}
+            return {"ok": False, "http_status": e.response.status_code, "error": f"HTTP {e.response.status_code}: {e.response.text}"}
         except httpx.ConnectError as e:
             log.error("Connection error: %s", e)
             return {"ok": False, "error": f"Cannot connect to {self.base_url}: {e}"}
@@ -90,7 +90,7 @@ class LumericalClient:
             return response.json()
         except httpx.HTTPStatusError as e:
             log.error("HTTP error %s: %s", e.response.status_code, e.response.text)
-            return {"ok": False, "error": f"HTTP {e.response.status_code}: {e.response.text}"}
+            return {"ok": False, "http_status": e.response.status_code, "error": f"HTTP {e.response.status_code}: {e.response.text}"}
         except httpx.ConnectError as e:
             log.error("Connection error: %s", e)
             return {"ok": False, "error": f"Cannot connect to {self.base_url}: {e}"}

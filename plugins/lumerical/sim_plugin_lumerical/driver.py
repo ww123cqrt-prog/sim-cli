@@ -85,9 +85,9 @@ class LumericalFDTDDriver:
     @staticmethod
     def _failure(response: dict) -> dict:
         data = response.get("data", {})
-        message = response.get("message") or response.get("error") or data.get("error") or "Lumerical backend request failed"
-        return {"ok": False, "error_code": "RUN_FAILED", "message": str(message)[:280],
-                "stderr": str(message)}
+        message = response.get("message") or response.get("error") or data.get("error") or data.get("stderr") or "; ".join(map(str, data.get("errors") or [])) or "Lumerical backend request failed"
+        return {**data, "ok": False, "error_code": "RUN_FAILED", "message": str(message)[:280],
+                "stderr": str(data.get("stderr") or message)}
 
     def connect(self) -> ConnectionInfo:
         result = self.launch()
@@ -108,7 +108,8 @@ class LumericalFDTDDriver:
             self.client.close()
             return {"ok": True, "disconnected": True}
         response = self.client.post("/disconnect")
-        if not response.get("ok"):
+        already_gone = response.get("http_status") == 404 and "unknown session_id" in str(response.get("error", ""))
+        if not response.get("ok") and not already_gone:
             return self._failure(response)
         self._session_id = self.client.session_id = None
         self._connected_at = None

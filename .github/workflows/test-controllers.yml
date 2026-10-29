@@ -29,3 +29,5 @@ jobs:
       - run: uv run --no-sync python scripts/workspace.py test --package comsol
       - run: uv run --no-sync python scripts/workspace.py test --package lumerical
       - run: uv run --no-sync python scripts/workspace.py test --package cmd
+      - name: Verify independent wheels and core-only scan
+        run: uv run --no-sync python scripts/verify_wheels.py

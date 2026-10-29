@@ -119,7 +119,7 @@ def _inject_synthetic_coolprop(request):
     orig_cache = _drivers_pkg._INSTANCE_CACHE.pop("coolprop", None)
 
     _drivers_pkg._BUILTIN_REGISTRY.append(fake_spec)
-    _drivers_pkg._REGISTRY.append(fake_spec)
+    _drivers_pkg._REGISTRY.insert(len(orig_builtin), fake_spec)
     _drivers_pkg._INSTANCE_CACHE["coolprop"] = instance
     try:
         yield

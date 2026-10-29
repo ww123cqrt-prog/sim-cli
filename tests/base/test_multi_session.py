@@ -11,6 +11,9 @@ is needed. Covers:
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -30,6 +33,7 @@ class FakeDriver:
 
     def launch(self, **kwargs):
         self._launched = True
+        self._disconnected = False
         self.launch_kwargs = kwargs
         return {"ok": True, "launch_options": kwargs}
 
@@ -195,6 +199,43 @@ class TestMultiSession:
         assert ps["default_session"] == sid_b
         assert fake_drivers["alpha"]._disconnected is True
         assert fake_drivers["beta"]._disconnected is False
+
+    def test_stale_disconnect_does_not_close_reconnected_session(self, client, fake_drivers):
+        old_sid = _connect(client, "alpha")
+        state = server._sessions[old_sid]
+        original_lock = state.lock
+        test_thread = threading.get_ident()
+        stale_selected = threading.Event()
+        resume_stale = threading.Event()
+
+        class DelayedLock:
+            def __enter__(self):
+                if threading.get_ident() != test_thread:
+                    stale_selected.set()
+                    assert resume_stale.wait(10)
+                original_lock.acquire()
+                return self
+
+            def __exit__(self, *args):
+                original_lock.release()
+
+        state.lock = DelayedLock()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(server._teardown_session, old_sid)
+            try:
+                assert stale_selected.wait(10)
+                assert server._teardown_session(old_sid) == old_sid
+                new_sid = _connect(client, "alpha")
+            finally:
+                resume_stale.set()
+            assert pending.result(timeout=10) is None
+
+        assert new_sid in server._sessions
+        assert fake_drivers["alpha"]._disconnected is False
+        response = client.post("/exec", json={"code": "x"},
+                               headers={"X-Sim-Session": new_sid})
+        assert response.status_code == 200
+        assert response.json()["data"]["solver"] == "alpha"
 
     def test_same_solver_twice_rejected(self, client, fake_drivers):
         _connect(client, "alpha")

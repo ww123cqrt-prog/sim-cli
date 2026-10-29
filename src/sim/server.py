@@ -723,6 +723,9 @@ def _teardown_session(session_id: str) -> str | None:
     if state is None:
         return None
     with state.lock:
+        with _sessions_lock:
+            if _sessions.get(session_id) is not state:
+                return None
         if state.driver is not None:
             try:
                 result = state.driver.disconnect()

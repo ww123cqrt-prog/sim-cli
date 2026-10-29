@@ -17,3 +17,12 @@ Build one package with `uv build --no-sources --package <distribution>`.
 Core releases use `v<version>` and `publish.yml`; plugin releases use
 `<solver>-v<version>` and `plugin-publish.yml`, each matching package metadata.
 Never combine sibling distributions in one publication artifact set.
+
+For this fork's core/COMSOL/Lumerical/CMD work, use the `controllers` group
+instead of installing every workspace plugin. Preserve platform-specific
+COMSOL paths and existing workspace file-transfer behavior. Keep private host
+profiles outside the repository. Existing Mac absolute launcher paths and
+long-task process ownership/logging rules remain in the operator's local
+skills; remote Windows execution uses remote-windows-workstation and its
+per-machine software cache. Do not tie unattended computations to an agent
+terminal or replace an existing shared service during package installation.

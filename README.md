@@ -1,3 +1,5 @@
+> This fork integrates the upstream workspace with platform-aware COMSOL, workspace file transfer, Lumerical FDTD/RCWA and CMD. See [controller migration](docs/monorepo-migration.md) for controlled installation and verification.
+
 # sim
 
 **`sim` reads existing CAE files and turns them into structured text an agent

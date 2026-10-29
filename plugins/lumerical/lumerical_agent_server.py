@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lumerical Agent Server — sim-cli compatible HTTP server for Lumerical simulations.
+r"""Lumerical Agent Server — sim-cli compatible HTTP server for Lumerical simulations.
 
 Fully compatible with the sim-cli HTTP API protocol. Accepts the same
 endpoint shapes as sim/server.py so that `sim --host <remote> --port 7601`
@@ -60,7 +60,7 @@ log = logging.getLogger("lumerical-agent-server")
 # ── Lumerical PATH setup ────────────────────────────────────────────────────
 # Add Lumerical's bin directory to PATH so interopapi.dll can find its dependencies.
 # This allows using any Python (e.g. Anaconda) to import lumapi.
-_LUMERICAL_INSTALL = Path(r"C:\Program Files\Ansys Inc\v252\Lumerical")
+_LUMERICAL_INSTALL = Path(os.environ.get("LUMERICAL_ROOT", r"C:\Program Files\Ansys Inc\v252\Lumerical"))
 _LUMERICAL_BIN = _LUMERICAL_INSTALL / "bin"
 if _LUMERICAL_BIN.exists():
     _bin_str = str(_LUMERICAL_BIN)
@@ -109,6 +109,7 @@ class _NaNSafeJSONResponse(JSONResponse):
 def find_lumerical_install() -> Path | None:
     """Find the Lumerical installation directory."""
     candidates = [
+        *([Path(os.environ["LUMERICAL_ROOT"])] if os.environ.get("LUMERICAL_ROOT") else []),
         Path(r"C:\Program Files\Ansys Inc\v252\Lumerical"),
         Path(r"C:\Program Files\Ansys Inc\Lumerical"),
         Path(r"C:\Program Files\Lumerical"),
@@ -342,7 +343,7 @@ def connect(req: ConnectRequest):
     # Validate lumapi is importable and create FDTD instance
     try:
         lumapi = _import_lumapi()
-        fdtd = lumapi.FDTD()
+        fdtd = lumapi.FDTD(hide=req.ui_mode == "no_gui")
     except ImportError as e:
         raise HTTPException(500, f"lumapi not available: {e}")
     except Exception as e:

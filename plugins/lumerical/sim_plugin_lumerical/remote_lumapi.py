@@ -11,7 +11,7 @@ Usage:
     from sim_plugin_lumerical.remote_lumapi import RemoteLumapi
 
     # Create FDTD instance (connects to remote)
-    fdtd = RemoteLumapi(host="100.65.228.190", port=7601)
+    fdtd = RemoteLumapi(host="solver-host", port=7601)
 
     # Use like local lumapi
     fdtd.newproject()
@@ -25,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import logging
 from typing import Any
 
@@ -48,11 +49,14 @@ class RemoteLumapi:
 
     def __init__(
         self,
-        host: str = "100.65.228.190",
+        host: str | None = None,
         port: int = 7601,
         timeout: float = DEFAULT_TIMEOUT,
         hide: bool = True,
     ):
+        host = host or os.environ.get("LUMERICAL_HOST")
+        if not host:
+            raise ValueError("Lumerical host is required")
         self.host = host
         self.port = port
         self.base_url = f"http://{host}:{port}"

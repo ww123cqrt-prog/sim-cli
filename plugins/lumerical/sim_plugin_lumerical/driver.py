@@ -1,260 +1,151 @@
-"""Lumerical FDTD/RCWA driver for sim-cli.
-
-Architecture:
-- This driver connects to a remote Lumerical Agent Server via HTTP
-- The remote server runs on a Windows machine with Lumerical installed
-- Communication uses JSON over HTTP on port 7601 (default)
-
-This module is SDK-free: it does NOT import `lumapi` at module load time,
-so `sim check lumerical-fdtd` works on a host without Lumerical installed.
-All Lumerical operations happen on the remote server.
-"""
+"""SDK-free Lumerical drivers backed by an explicitly selected Agent Server."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
-import logging
 import time
-import uuid
 from pathlib import Path
-from typing import Any
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
-
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, SolverInstall
 from .client import LumericalClient
-
-log = logging.getLogger(__name__)
 
 
 class LumericalDriverError(RuntimeError):
-    """Lumerical driver failure with machine-readable diagnostics."""
-
     def __init__(self, message: str, diagnostics: dict | None = None):
         super().__init__(message)
         self.diagnostics = diagnostics or {}
 
-    def __str__(self) -> str:
-        bits = [super().__str__()]
-        if code := self.diagnostics.get("code"):
-            bits.append(f"code={code}")
-        if host := self.diagnostics.get("host"):
-            bits.append(f"host={host}")
-        if port := self.diagnostics.get("port"):
-            bits.append(f"port={port}")
-        return " | ".join(bits)
-
 
 class LumericalFDTDDriver:
-    """sim-cli driver for Lumerical FDTD via remote HTTP server.
-
-    This driver connects to a remote Windows machine running
-    lumerical-agent-server and executes FDTD simulations via HTTP API.
-
-    Usage:
-        sim --host 100.65.228.190 --port 7601 check lumerical-fdtd
-        sim --host 100.65.228.190 --port 7601 run lumerical-fdtd --request request.json
-    """
-
     name = "lumerical-fdtd"
     supports_session = True
 
-    def __init__(
-        self,
-        host: str = "100.65.228.190",
-        port: int = 7601,
-        timeout: float = 300,
-    ):
-        self.host = host
-        self.port = port
+    def __init__(self, host: str | None = None, port: int = 7601, timeout: float = 300):
         self.client = LumericalClient(host, port, timeout)
+        self.host, self.port = self.client.host, port
         self._session_id: str | None = None
         self._connected_at: float | None = None
-        self._run_count: int = 0
+        self._run_count = 0
 
     def detect(self, script: Path) -> bool:
-        """Check if this driver can handle the given script."""
-        # Check if script is a Lumerical project file
-        suffix = script.suffix.lower()
-        return suffix in {".fsp", ".lsf", ".fse"}
+        return script.suffix.lower() in {".fsp", ".lsf", ".fse"}
 
     def lint(self, script: Path) -> LintResult:
-        """Validate a simulation script before execution."""
         diagnostics = []
-
-        # Check file exists
-        if not script.exists():
-            diagnostics.append(Diagnostic(
-                level="error",
-                message=f"File not found: {script}",
-            ))
-
-        # Check file extension
-        suffix = script.suffix.lower()
-        if suffix not in {".fsp", ".lsf", ".fse"}:
-            diagnostics.append(Diagnostic(
-                level="warning",
-                message=f"Unusual file extension for Lumerical: {suffix}",
-            ))
-
-        return LintResult(
-            ok=len(diagnostics) == 0,
-            diagnostics=diagnostics,
-        )
+        if not script.is_file():
+            diagnostics.append(Diagnostic("error", f"File not found: {script}"))
+        if script.suffix.lower() not in {".fsp", ".lsf", ".fse", ".json"}:
+            diagnostics.append(Diagnostic("warning", f"Unusual file extension: {script.suffix}"))
+        return LintResult(not diagnostics, diagnostics)
 
     def detect_installed(self) -> list[SolverInstall]:
-        """Scan remote host for Lumerical installations via HTTP."""
-        try:
-            response = self.client.detect(self.name)
-            if response.get("ok"):
-                data = response.get("data", {})
-                installs = data.get("installs", [])
-                return [SolverInstall(
-                    name=inst.get("name", self.name),
-                    version=inst.get("version", "unknown"),
-                    path=inst.get("path", "remote"),
-                    source=f"remote:{self.host}:{self.port}",
-                    extra=inst.get("extra", {}),
-                ) for inst in installs]
-        except Exception as e:
-            log.debug("Detection failed: %s", e)
-        return []
+        if not self.host:
+            return []
+        response = self.client.detect(self.name)
+        if not response.get("ok"):
+            return []
+        return [SolverInstall(name=i.get("name", self.name), version=i.get("version", "unknown"),
+                              path=i.get("path", "remote"), source=f"remote:{self.host}:{self.port}",
+                              extra=i.get("extra", {}))
+                for i in response.get("data", {}).get("installs", [])]
+
+    def launch(self, host: str | None = None, port: int | None = None,
+               timeout: float | None = None, **kwargs) -> dict:
+        if self._session_id:
+            return {"ok": False, "error_code": "RUN_FAILED", "message": "A Lumerical session is already active"}
+        selected_host = host or self.host
+        selected_port = self.port if port is None else int(port)
+        if not selected_host:
+            return {"ok": False, "error_code": "RUN_FAILED",
+                    "message": "Lumerical host is required; pass driver_options.host or LUMERICAL_HOST"}
+        if (selected_host, selected_port) != (self.host, self.port) or timeout is not None:
+            self.client.close()
+            self.client = LumericalClient(selected_host, selected_port, timeout if timeout is not None else self.client.timeout)
+        self.host, self.port = selected_host, selected_port
+        health = self.client.health()
+        if not health.get("ok"):
+            return self._failure(health)
+        installs = self.detect_installed()
+        if not installs:
+            return {"ok": False, "error_code": "SOLVER_NOT_INSTALLED", "message": "Lumerical unavailable on selected backend"}
+        payload = {"solver": self.name, **{k: kwargs[k] for k in ("mode", "ui_mode", "processors", "workspace") if k in kwargs}}
+        response = self.client.post("/connect", json=payload)
+        if not response.get("ok"):
+            return self._failure(response)
+        data = response.get("data", response)
+        sid = data.get("session_id")
+        if not isinstance(sid, str) or not sid:
+            return {"ok": False, "error_code": "RUN_FAILED", "message": "Backend omitted session_id"}
+        self._session_id = self.client.session_id = sid
+        self._connected_at = time.time()
+        self._run_count = 0
+        return {**data, "ok": True, "session_id": sid,
+                "launch_options": {"backend_host": self.host, "backend_port": self.port}}
+
+    @staticmethod
+    def _failure(response: dict) -> dict:
+        data = response.get("data", {})
+        message = response.get("message") or response.get("error") or data.get("error") or "Lumerical backend request failed"
+        return {"ok": False, "error_code": "RUN_FAILED", "message": str(message)[:280],
+                "stderr": str(message)}
 
     def connect(self) -> ConnectionInfo:
-        """Connect to remote Lumerical Agent Server."""
-        try:
-            # Check server health first
-            health = self.client.health()
-            if not health.get("ok"):
-                return ConnectionInfo(
-                    solver="lumerical-fdtd",
-                    version=None,
-                    status="error",
-                    message=f"Server not healthy: {health.get('error', 'unknown')}",
-                )
-
-            # Detect Lumerical installation
-            detect = self.client.detect(self.name)
-            if not detect.get("ok"):
-                return ConnectionInfo(
-                    solver="lumerical-fdtd",
-                    version=None,
-                    status="error",
-                    message=f"Lumerical not found on remote: {detect.get('error', 'unknown')}",
-                )
-
-            # Get version from nested response
-            data = detect.get("data", {})
-            installs = data.get("installs", [])
-            version = installs[0].get("version") if installs else None
-
-            # Connect to server
-            response = self.client.post("/connect")
-            if response.get("ok"):
-                self._session_id = response.get("session_id", str(uuid.uuid4()))
-                self._connected_at = time.time()
-                return ConnectionInfo(
-                    solver="lumerical-fdtd",
-                    version=version,
-                    status="ok",
-                    message="Connected to remote Lumerical server",
-                )
-            else:
-                return ConnectionInfo(
-                    solver="lumerical-fdtd",
-                    version=version,
-                    status="error",
-                    message=response.get("error", "Connection failed"),
-                )
-        except Exception as e:
-            return ConnectionInfo(
-                solver="lumerical-fdtd",
-                version=None,
-                status="error",
-                message=str(e),
-            )
+        result = self.launch()
+        return ConnectionInfo(self.name, result.get("solver_version"),
+                              "ok" if result.get("ok") else "error", result.get("message", "Connected"))
 
     def run(self, code: str, label: str = "") -> dict:
-        """Execute a simulation request on the remote server.
-
-        Args:
-            code: JSON string containing the simulation request
-            label: Optional label for the run
-
-        Returns:
-            dict with at least {"ok": bool} and optional result data
-        """
-        try:
-            # Parse the request
-            if isinstance(code, str):
-                request = json.loads(code)
-            else:
-                request = code
-
-            # Send to remote server
-            response = self.client.post("/run", json=request)
-            self._run_count += 1
-            return response
-        except json.JSONDecodeError as e:
-            return {"ok": False, "error": f"Invalid JSON: {e}"}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+        if not self._session_id:
+            return {"ok": False, "error_code": "RUN_FAILED", "message": "Connect to Lumerical before executing code"}
+        response = self.client.post("/exec", json={"code": code, "label": label})
+        self._run_count += 1
+        if not response.get("ok"):
+            return self._failure(response)
+        return {**response.get("data", {}), "ok": True}
 
     def disconnect(self) -> dict:
-        """Disconnect from the remote server."""
-        try:
-            response = self.client.post("/disconnect")
-            self._session_id = None
-            self._connected_at = None
+        if self._session_id is None:
+            self.client.close()
             return {"ok": True, "disconnected": True}
-        except Exception as e:
-            return {"ok": True, "disconnected": True, "error": str(e)}
+        response = self.client.post("/disconnect")
+        if not response.get("ok"):
+            return self._failure(response)
+        self._session_id = self.client.session_id = None
+        self._connected_at = None
+        self.client.close()
+        return {"ok": True, "disconnected": True}
 
     def parse_output(self, stdout: str) -> dict:
-        """Parse solver output."""
-        # Try to parse as JSON
         try:
-            return json.loads(stdout)
-        except json.JSONDecodeError:
+            value = json.loads(stdout)
+            return value if isinstance(value, dict) else {"result": value}
+        except ValueError:
             return {"raw": stdout}
 
-    def run_file(self, script: Path) -> dict:
-        """Run a simulation file on the remote server.
-
-        Args:
-            script: Path to the simulation file
-
-        Returns:
-            dict with simulation results
-        """
-        # Build request
-        request = {
-            "task_id": f"run-{uuid.uuid4().hex[:12]}",
-            "solver": "lumerical-fdtd",
-            "action": "run",
-            "workdir": str(script.parent),
-            "template": {
-                "project_file": str(script),
-            },
-        }
-
-        return self.run(json.dumps(request))
+    def run_file(self, script: Path) -> RunResult:
+        start = time.monotonic()
+        timestamp = datetime.now(timezone.utc).isoformat()
+        try:
+            request = json.loads(script.read_text(encoding="utf-8")) if script.suffix.lower() == ".json" else {"script": str(script)}
+            if not isinstance(request, dict) or not isinstance(request.get("script"), str):
+                raise ValueError("Run request requires a remote script path")
+            if request.get("solver", self.name) != self.name:
+                raise ValueError("Run request solver does not match selected driver")
+            request["solver"] = self.name
+            response = self.client.post("/run", json=request)
+        except (OSError, ValueError) as exc:
+            response = {"ok": False, "error": str(exc)}
+        data = response.get("data", {})
+        errors = list(data.get("errors") or [])
+        success = response.get("ok") is True and not errors and data.get("exit_code") == 0
+        if not success and not errors:
+            errors.append(str(response.get("error") or data.get("error") or data.get("stderr") or "Remote run failed"))
+        return RunResult(exit_code=0 if success else (data.get("exit_code") or 1),
+                         stdout=str(data.get("stdout", "")), stderr=str(data.get("stderr", response.get("error", ""))),
+                         duration_s=time.monotonic()-start, script=str(script), solver=self.name,
+                         timestamp=timestamp, errors=errors, artifacts=data.get("artifacts") or [])
 
 
 class LumericalRCWADriver(LumericalFDTDDriver):
-    """sim-cli driver for Lumerical RCWA via remote HTTP server.
-
-    RCWA is accessed through the same FDTD session via addrcwa().
-    This driver extends LumericalFDTDDriver with RCWA-specific behavior.
-    """
-
+    """RCWA uses the same backend session with explicit RCWA request identity."""
     name = "lumerical-rcwa"
-
-    def detect(self, script: Path) -> bool:
-        """Check if this driver can handle RCWA scripts."""
-        # RCWA uses the same .fsp files as FDTD
-        suffix = script.suffix.lower()
-        return suffix in {".fsp", ".lsf"}
-
-    def detect_installed(self) -> list[SolverInstall]:
-        """Scan remote host for Lumerical RCWA support."""
-        # RCWA is part of FDTD, so same detection
-        return super().detect_installed()

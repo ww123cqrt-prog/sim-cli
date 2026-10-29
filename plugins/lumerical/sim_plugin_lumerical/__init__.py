@@ -19,7 +19,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "lumerical-fdtd",
     "summary": "Driver plugin for Lumerical FDTD/RCWA via remote HTTP server.",
-    "homepage": "https://github.com/user/sim-plugin-lumerical",
+    "homepage": "https://github.com/ww123cqrt-prog/sim-cli/tree/main/plugins/lumerical",
     "license_class": "commercial",
     "solver_name": "lumerical-fdtd",
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -25,19 +26,23 @@ class LumericalClient:
 
     def __init__(
         self,
-        host: str = "100.65.228.190",
+        host: str | None = None,
         port: int = 7601,
         timeout: float = DEFAULT_TIMEOUT,
     ):
-        self.host = host
+        self.host = host or os.environ.get("LUMERICAL_HOST")
         self.port = port
-        self.base_url = f"http://{host}:{port}"
+        authority = f"[{self.host}]" if self.host and ":" in self.host and not self.host.startswith("[") else self.host
+        self.base_url = f"http://{authority}:{port}"
         self.timeout = timeout
         self._client: httpx.Client | None = None
+        self.session_id: str | None = None
 
     @property
     def client(self) -> httpx.Client:
         """Lazy-initialized HTTP client."""
+        if not self.host:
+            raise ValueError("Lumerical host is required; pass driver_options.host or LUMERICAL_HOST")
         if self._client is None:
             self._client = httpx.Client(timeout=self.timeout)
         return self._client
@@ -79,7 +84,8 @@ class LumericalClient:
         url = f"{self.base_url}{path}"
         log.debug("POST %s %s", url, json)
         try:
-            response = self.client.post(url, json=json or {})
+            headers = {"X-Sim-Session": self.session_id} if self.session_id else {}
+            response = self.client.post(url, json=json or {}, headers=headers)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:

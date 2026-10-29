@@ -76,6 +76,12 @@ view of agent edits.
 
 ## Install
 
+For this fork's paired Mac/Windows setup, keep `sim-cli` and
+`sim-plugin-comsol` as sibling checkouts. The local uv source in
+`pyproject.toml` binds this plugin to the sibling core project, retaining the
+workspace-transfer extensions. From this checkout, use `uv sync --extra test`;
+keep machine-specific COMSOL executable paths outside the repositories.
+
 For agent projects, install sim-cli-core and the COMSOL plugin in the project
 environment:
 

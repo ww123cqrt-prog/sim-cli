@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-lumerical"
+version = "0.1.0"
+description = "Lumerical FDTD/RCWA driver for sim-cli via remote HTTP server"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "ww123cqrt-prog" }]
+keywords = ["lumerical", "fdtd", "rcwa", "simulation", "sim-cli", "plugin"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-cli-core>=0.3",
+    "httpx>=0.24",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+lumerical-fdtd = "sim_plugin_lumerical:LumericalFDTDDriver"
+lumerical-rcwa = "sim_plugin_lumerical:LumericalRCWADriver"
+
+[project.entry-points."sim.skills"]
+lumerical-fdtd = "sim_plugin_lumerical:skills_dir"
+
+[project.entry-points."sim.plugins"]
+lumerical-fdtd = "sim_plugin_lumerical:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/user/sim-plugin-lumerical"

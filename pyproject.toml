@@ -1,15 +1,15 @@
 [project]
 name = "sim-cli-core"
-version = "0.3.9"
+version = "0.4.2"
 description = "Agent-native simulation asset parsing and CAD/CAE runtime"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+authors = [{ name = "SVD Lab" }]
 keywords = [
     "simulation", "cae", "cad", "cfd", "fea",
     "llm", "agent", "agentic",
-    "plugins", "out-of-tree",
+    "parsing", "cae-files",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -47,6 +47,9 @@ dependencies = [
 [project.optional-dependencies]
 dev     = ["pytest>=8.0", "ruff>=0.4"]
 
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.0", "hatchling>=1.26"]
+
 [project.urls]
 Homepage      = "https://github.com/svd-ai-lab/sim-cli"
 Repository    = "https://github.com/svd-ai-lab/sim-cli"
@@ -56,6 +59,12 @@ Changelog     = "https://github.com/svd-ai-lab/sim-cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sim = "sim.cli:main"
+
+[tool.uv.workspace]
+members = ["plugins/*"]
+
+[tool.uv.sources]
+sim-cli-core = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -70,3 +79,6 @@ markers = ["integration: requires solver packages installed"]
 
 [tool.ruff]
 target-version = "py310"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/sim", "pyproject.toml", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]

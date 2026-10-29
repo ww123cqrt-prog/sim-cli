@@ -11,6 +11,7 @@ dist/
 
 # Virtual envs
 .venv/
+.venv-*/
 venv/
 env/
 
@@ -61,3 +62,8 @@ tests/inspect/_run_outputs/
 docs/abaqus-plan.md
 docs/plans/
 docs/superpowers/
+
+# Local analysis and bytecode
+.codegraph/
+__pycache__/
+*.py[cod]

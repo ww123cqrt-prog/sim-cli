@@ -11,6 +11,15 @@ tools directly where they are the right primitive. This skill carries the
 **cross-solver discipline** — the rules that hold across sim-cli workflows,
 regardless of which solver you drive.
 
+## Prior experience lookup
+
+Before building, solving, or substantively revising a simulation, search the
+operator's retained cases, methods, and failure records using
+[the shared experience index](references/prior-experience.md). Read relevant
+sources and their current acceptance limits; record the applicable lessons or
+that no relevant experience was found before execution. Keep case identity,
+model variants, learning acceptance, and numerical validation distinct.
+
 The **solver skill** is self-contained for solver-specific work:
 solver hard constraints, dependency chains, snippets, workflows, SDK/solver
 notes. It does not depend on loading this skill — but it should stay

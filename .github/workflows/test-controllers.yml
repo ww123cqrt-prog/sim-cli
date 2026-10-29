@@ -1,0 +1,33 @@
+name: Test controller workspace
+on:
+  pull_request:
+    paths: ['src/**', 'plugins/comsol/**', 'plugins/lumerical/**', 'plugins/cmd/**', 'tests/**', 'scripts/**', 'pyproject.toml', 'uv.lock', '.github/workflows/test-controllers.yml']
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: macos-15
+            python: '3.11'
+          - os: windows-latest
+            python: '3.12'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --group controllers
+      - name: Verify all controller entry points
+        run: uv run --no-sync python -c "from importlib.metadata import entry_points; e={p.name:p for p in entry_points(group='sim.drivers')}; assert all(callable(e[n].load()) for n in ['comsol','lumerical-fdtd','lumerical-rcwa','cmd'])"
+      - run: uv run --no-sync python scripts/workspace.py index --check
+      - run: uv run --no-sync python scripts/workspace.py test --package core
+      - run: uv run --no-sync python scripts/workspace.py test --package comsol
+      - run: uv run --no-sync python scripts/workspace.py test --package lumerical
+      - run: uv run --no-sync python scripts/workspace.py test --package cmd
+      - name: Verify independent wheels and core-only scan
+        run: uv run --no-sync python scripts/verify_wheels.py

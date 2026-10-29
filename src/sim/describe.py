@@ -63,6 +63,8 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
          "summary": "Run a snippet in the active session."},
         {"cmd": "sim exec --file snippet.py",
          "summary": "Run a file's contents in the active session."},
+        {"cmd": "sim exec --file build.lsf --asset structure.gds=input/structure.gds",
+         "summary": "Upload an input file before running the script."},
     ],
     "inspect": [
         {"cmd": "sim inspect session.summary",
@@ -82,6 +84,22 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
     "screenshot": [
         {"cmd": "sim screenshot -o desktop.png",
          "summary": "Capture the server's desktop to a PNG file."},
+    ],
+    "put": [
+        {"cmd": "sim put ./input.gds input/input.gds",
+         "summary": "Upload a local file into sim-server's transfer workspace."},
+    ],
+    "get": [
+        {"cmd": "sim get results/output.fsp ./output.fsp",
+         "summary": "Download a file from sim-server's transfer workspace."},
+    ],
+    "ls": [
+        {"cmd": "sim ls input",
+         "summary": "List files below a workspace directory."},
+    ],
+    "rm": [
+        {"cmd": "sim rm input/input.gds",
+         "summary": "Delete a file from sim-server's transfer workspace."},
     ],
     "logs": [
         {"cmd": "sim logs --limit 20", "summary": "Show the last 20 history entries."},

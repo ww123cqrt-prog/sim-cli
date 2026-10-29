@@ -36,8 +36,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 
@@ -83,6 +83,10 @@ async def root():
             "GET /ps": "List active sessions",
             "GET /inspect/{name}": "Query session state",
             "GET /screenshot": "Capture desktop screenshot",
+            "GET /workspace/list": "List files in the transfer workspace",
+            "POST /files/upload": "Upload a file into the transfer workspace",
+            "GET /files/download": "Download a file from the transfer workspace",
+            "DELETE /files/delete": "Delete a file from the transfer workspace",
             "POST /connect": "Connect to solver",
             "POST /exec": "Execute code snippet",
             "POST /run": "Run script (one-shot)",
@@ -119,6 +123,10 @@ class ExecRequest(BaseModel):
 class RunRequest(BaseModel):
     script: str
     solver: str
+
+
+def _workspace_http_error(exc: Exception) -> HTTPException:
+    return HTTPException(400, f"invalid workspace path: {exc}")
 
 
 # ── Session state ────────────────────────────────────────────────────────────
@@ -246,6 +254,94 @@ def detect_solver(solver: str):
             "installs": [i.to_dict() for i in installs],
             "resolutions": resolutions,
             "compatibility": compat_dict,
+        },
+    }
+
+
+@app.get("/workspace/list")
+def workspace_list(path: str = "."):
+    from sim.workspace import WorkspacePathError, list_workspace_files, workspace_root
+
+    try:
+        rows = list_workspace_files(workspace_root(), path)
+    except WorkspacePathError as exc:
+        raise _workspace_http_error(exc) from exc
+    return {
+        "ok": True,
+        "data": {
+            "path": path,
+            "files": rows,
+        },
+    }
+
+
+@app.post("/files/upload")
+def file_upload(
+    path: str = Form(...),
+    overwrite: bool = Form(False),
+    file: UploadFile = File(...),
+):
+    from sim.workspace import WorkspacePathError, max_upload_bytes, resolve_workspace_path, workspace_root
+
+    try:
+        target = resolve_workspace_path(workspace_root(), path)
+    except WorkspacePathError as exc:
+        raise _workspace_http_error(exc) from exc
+    if target.exists() and not overwrite:
+        raise HTTPException(409, "file already exists; pass overwrite=true to replace it")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    size = 0
+    limit = max_upload_bytes()
+    try:
+        with target.open("wb") as fh:
+            while chunk := file.file.read(1024 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise HTTPException(413, f"upload too large; limit is {limit} bytes")
+                fh.write(chunk)
+    except HTTPException:
+        target.unlink(missing_ok=True)
+        raise
+
+    return {
+        "ok": True,
+        "data": {
+            "path": path,
+            "size": size,
+        },
+    }
+
+
+@app.get("/files/download")
+def file_download(path: str):
+    from sim.workspace import WorkspacePathError, resolve_workspace_path, workspace_root
+
+    try:
+        source = resolve_workspace_path(workspace_root(), path)
+    except WorkspacePathError as exc:
+        raise _workspace_http_error(exc) from exc
+    if not source.is_file():
+        raise HTTPException(404, "file not found")
+    return FileResponse(source, filename=source.name)
+
+
+@app.delete("/files/delete")
+def file_delete(path: str):
+    from sim.workspace import WorkspacePathError, resolve_workspace_path, workspace_root
+
+    try:
+        target = resolve_workspace_path(workspace_root(), path)
+    except WorkspacePathError as exc:
+        raise _workspace_http_error(exc) from exc
+    if not target.is_file():
+        raise HTTPException(404, "file not found")
+    target.unlink()
+    return {
+        "ok": True,
+        "data": {
+            "path": path,
+            "deleted": True,
         },
     }
 
@@ -622,14 +718,20 @@ def screenshot():
 
 def _teardown_session(session_id: str) -> str | None:
     """Best-effort: tear down one session by id. Returns the id torn down, or None."""
-    state = _drop_session(session_id)
+    with _sessions_lock:
+        state = _sessions.get(session_id)
     if state is None:
         return None
-    if state.driver is not None:
-        try:
-            state.driver.disconnect()
-        except Exception:
-            pass
+    with state.lock:
+        if state.driver is not None:
+            try:
+                result = state.driver.disconnect()
+            except Exception as exc:
+                raise HTTPException(500, f"disconnect failed; session retained: {exc}") from exc
+            if isinstance(result, dict) and result.get("ok") is False:
+                reason = result.get("message") or result.get("error") or result.get("stderr") or "backend rejected disconnect"
+                raise HTTPException(500, f"disconnect failed; session retained: {reason}")
+        _drop_session(session_id)
     return state.session_id
 
 

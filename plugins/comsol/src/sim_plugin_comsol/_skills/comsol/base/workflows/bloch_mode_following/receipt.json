@@ -1,0 +1,160 @@
+{
+  "schema": "sim-plugin-comsol.bloch-mode-following-base.v3",
+  "generated_at": "2026-09-18T10:32:00+08:00",
+  "comsol_version": "6.4.0.293",
+  "purpose": "Device-neutral, unsolved 3D Bloch eigenfrequency case with dual M-Gamma-X/Y-M paths, visible Study Parametric Sweep, explicitly experimental/unstable COMSOL 6.4 Mode Following, and an x/y-asymmetric validation motif.",
+  "model": {
+    "file": "COMSOL64_3D_Bloch_ModeFollowing_Base.mph",
+    "bytes": 816800,
+    "sha256": "04A810BC3DCF193558C4785104CA25DB07C4B1501D3D5389346928E9DBFE9709",
+    "domains": 10,
+    "boundaries": 52,
+    "mesh_elements": 2484,
+    "solutions_empty": true,
+    "results_empty": true
+  },
+  "validation_motif": {
+    "physical_structure": "0.46a by 0.22a rectangular n=1.5 pillar in the n=3.4 structure layer",
+    "mesh_partition": "The rectangular partition column crosses all five z layers for sweep-mesh compatibility; only its structure-layer segment uses n_pillar.",
+    "symmetry_purpose": "Break x/y interchange symmetry so X and Y cannot agree by C4v symmetry."
+  },
+  "study_contract": {
+    "manual_study": "std1/Eigenfrequency; set use_k_scan=0 and qx,qy",
+    "tracked_study": "stdmf/Parametric Sweep param + Eigenfrequency eig",
+    "swept_parameter": "k",
+    "parameter_list": "range(0,0.25,3)",
+    "use_k_scan_default": 1,
+    "path_mode_default": 2,
+    "path_axis_default": 0,
+    "path_axis_0": "M-Gamma-X-M",
+    "path_axis_1": "M-Gamma-Y-M",
+    "pdistrib": "off"
+  },
+  "path_anchors": {
+    "k_0": [0.5, 0.5],
+    "k_1": [0.0, 0.0],
+    "k_2_axis_0": [0.5, 0.0],
+    "k_2_axis_1": [0.0, 0.5],
+    "k_3": [0.5, 0.5],
+    "structural_verification": "PASS"
+  },
+  "solver_contract": {
+    "modefollowing": "on",
+    "modefollowing_status": "experimental_unstable_auxiliary_only",
+    "authoritative_result": "per-k parametric eigenfrequency spectrum",
+    "completion_policy": "Do not tune candidate count, path step, or thresholds merely to force complete Mode Following. Non-finite stopped components are unresolved.",
+    "candidate_eigenpairs": 20,
+    "stop_when_no_eigenvalue": "on",
+    "mode_following_child": "solmf/e1/mf1",
+    "eigenvalue_param_child_present": false,
+    "duplicate_sweep_owner_present": false
+  },
+  "floquet_contract": {
+    "source_to_destination": "negative face to positive face",
+    "source_destination_owner": "EWFD PeriodicCondition pcx/pcy with manual destination selection",
+    "identity_pairs_present": false,
+    "vector": "{kBx,kBy,0}",
+    "qx_definition": "kBx=2*pi*qx_active/a",
+    "qy_definition": "kBy=2*pi*qy_active/a"
+  },
+  "build": {
+    "source": "BuildBlochModeFollowingBase.java",
+    "source_sha256": "3E6185E477C88A50EBE0FD2D430F87258FB232EA2FA2AD1B61FD6B127E692C43",
+    "geometry_and_mesh_only": true,
+    "study_or_solver_run": false
+  },
+  "structural_verification": {
+    "source": "VerifyBlochModeFollowingBase.java",
+    "source_sha256": "FEA72AA573303A36FB85D20C0429A4AB429B72C4B182920764F7F0EA3ACF5C17",
+    "status": "PASS",
+    "sentinel": "BASE_VERIFY=PASS",
+    "fresh_process_reload": true,
+    "study_or_solver_run": false
+  },
+  "gamma_regression": {
+    "source": "VerifyBlochModeFollowingGammaSolve.java",
+    "source_sha256": "163E54A010E1B5C556E0851EA53C2A02818A0A8456883E479753854ECDEC5D56",
+    "status": "PASS",
+    "sentinel": "BASE_GAMMA=PASS",
+    "identity_pairs": [],
+    "candidate_eigenpairs": 20,
+    "elapsed_seconds": 15.1668389,
+    "peak_physical_memory_mb": 1297,
+    "peak_virtual_memory_mb": 1434,
+    "solution_saved_to_model": false
+  },
+  "dual_path_anchor_solve": {
+    "source": "VerifyBlochModeFollowingDualPathSolve.java",
+    "source_sha256": "6345D4464EAC5037858649C4036C152A27336D3D6A4DCFE4B28D92101A6994AC",
+    "status": "PASS",
+    "sentinel": "DUAL_PATH_SOLVE=PASS",
+    "candidate_eigenpairs": 20,
+    "gamma_axis_0_seconds": 15.0783053,
+    "gamma_axis_1_seconds": 9.0065396,
+    "x_seconds": 5.4102707,
+    "y_seconds": 6.6717049,
+    "gamma_max_relative_sorted_spectrum_difference": 1.6908679717659306e-14,
+    "xy_max_relative_sorted_spectrum_difference": 0.004539143138502983,
+    "peak_physical_memory_mb": 1457,
+    "peak_virtual_memory_mb": 1593,
+    "solution_saved_to_model": false
+  },
+  "mode_following_parametric_smoke": {
+    "source": "VerifyBlochModeFollowingParametricSweep.java",
+    "source_sha256": "D83C288840393A24A9EC13F5E970842679B789BB1358C1FC2F8DA13200229F28",
+    "execution_status": "PASS",
+    "tracking_completeness": "PARTIAL",
+    "sentinel": "DUAL_PATH_PARAMETRIC_SWEEP_EXECUTION=PASS",
+    "execution_contract": "The Study is run and every ParametricStore is checked; solmf.runAll() is not a sweep verification.",
+    "temporary_parameter_list": "range(0,1,2)",
+    "candidate_eigenpairs": 8,
+    "axis_0_finite_tracked_modes": [8, 2, 1],
+    "axis_1_finite_tracked_modes": [8, 2, 0],
+    "axis_0_seconds": 29.6409262,
+    "axis_1_seconds": 21.0665837,
+    "solution_saved_to_model": false
+  },
+  "numerical_readiness": {
+    "source": "VerifyBlochModeFollowingDenseConvergence.java",
+    "source_sha256": "25F539C7E384D7C67406A72FAF92148E04953D20C086A4062ACE9D670AB7AE7C",
+    "status": "PARTIAL",
+    "base_degrees_of_freedom": 37594,
+    "refined_degrees_of_freedom": 81282,
+    "forward_path_points": 13,
+    "reverse_path_points": 13,
+    "candidate_check_points": 7,
+    "mesh_check_points": 7,
+    "x_forward_seconds": 155.8871301,
+    "x_reverse_seconds": 147.3590943,
+    "x_candidate_30_seconds": 77.9181334,
+    "x_refined_seconds": 214.9846216,
+    "y_forward_seconds": 149.5031043,
+    "y_reverse_seconds": 152.8236607,
+    "y_candidate_30_seconds": 82.3662877,
+    "y_refined_seconds": 218.6292166,
+    "peak_physical_memory_mb": 3523,
+    "peak_virtual_memory_mb": 4099,
+    "mode_following_warning_count": 72,
+    "x_forward_finite_modes_min_max": [1, 20],
+    "y_forward_finite_modes_min_max": [1, 20],
+    "x_forward_points_with_stopped_modes": 12,
+    "y_forward_points_with_stopped_modes": 12,
+    "x_forward_reverse_finite_count_mismatch_points": 13,
+    "y_forward_reverse_finite_count_mismatch_points": 4,
+    "x_candidate_20_to_30_max_relative_nearest_finite_frequency_change": 0.031644826859960014,
+    "y_candidate_20_to_30_max_relative_nearest_finite_frequency_change": 0.03214060884759856,
+    "x_base_to_refined_max_relative_nearest_finite_frequency_change": 0.020484701158115952,
+    "y_base_to_refined_max_relative_nearest_finite_frequency_change": 0.020484701158121354,
+    "interpretation": "The parameterized eigensolves are small and executable, but complete tracked-band identity, candidate-count convergence, mesh convergence, and PML convergence are not established. Non-finite stopped modes are unresolved, never zero or valid bands."
+  },
+  "reference": {
+    "comsol_application": "Wave Optics Module/Gratings and Metamaterials/bandgap_photonic_crystal.mph",
+    "observed_layout": "Study Parametric Sweep plus Eigenfrequency Mode Following; solver ModeFollowing child; no duplicate EigenvalueParam"
+  },
+  "limitations": [
+    "The five layers, refractive indices, and asymmetric pillar are validation placeholders, not a VCSEL or PCSEL device.",
+    "The delivered model is intentionally unsolved.",
+    "The anchor spectra verify path wiring; they do not establish band identity or path convergence.",
+    "Mode Following assists continuation but does not prove physical mode identity, mesh convergence, candidate-count convergence, or PML convergence."
+  ]
+}

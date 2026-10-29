@@ -354,12 +354,13 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
 
         try:
             client = TestClient(server.app)
-            r = client.post("/connect", json={
-                "solver": "comsol",
-                "mode": "solver",
-                "ui_mode": "no_gui",
-                "processors": 1,
-            })
+            with patch("sim.plugins.skills_dir_for", return_value=None):
+                r = client.post("/connect", json={
+                    "solver": "comsol",
+                    "mode": "solver",
+                    "ui_mode": "no_gui",
+                    "processors": 1,
+                })
             self.assertEqual(r.status_code, 200, r.text)
             skills = r.json()["data"]["skills"]
             self.assertIsNone(skills["root"])

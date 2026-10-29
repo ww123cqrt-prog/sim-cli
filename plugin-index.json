@@ -25,7 +25,7 @@
       "solver": "autodeskfusion",
       "package": "sim-plugin-autodeskfusion",
       "version": "0.1.0",
-      "install_spec": "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/autodeskfusion",
+      "install_spec": "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/autodeskfusion",
       "path": "plugins/autodeskfusion",
       "repository": "https://github.com/svd-ai-lab/sim-cli",
       "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion",
@@ -42,13 +42,33 @@
       }
     },
     {
+      "solver": "cmd",
+      "package": "sim-plugin-cmd",
+      "version": "0.1.0",
+      "install_spec": "sim-plugin-cmd @ git+https://github.com/ww123cqrt-prog/sim-cli.git@main#subdirectory=plugins/cmd",
+      "path": "plugins/cmd",
+      "repository": "https://github.com/ww123cqrt-prog/sim-cli",
+      "source": "https://github.com/ww123cqrt-prog/sim-cli/tree/main/plugins/cmd",
+      "entry_points": {
+        "sim.drivers": {
+          "cmd": "sim_plugin_cmd:CmdDriver"
+        },
+        "sim.skills": {
+          "cmd": "sim_plugin_cmd:skills_dir"
+        },
+        "sim.plugins": {
+          "cmd": "sim_plugin_cmd:plugin_info"
+        }
+      }
+    },
+    {
       "solver": "comsol",
       "package": "sim-plugin-comsol",
       "version": "0.1.14",
-      "install_spec": "sim-plugin-comsol",
+      "install_spec": "sim-plugin-comsol @ git+https://github.com/ww123cqrt-prog/sim-cli.git@main#subdirectory=plugins/comsol",
       "path": "plugins/comsol",
-      "repository": "https://github.com/svd-ai-lab/sim-cli",
-      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/comsol",
+      "repository": "https://github.com/ww123cqrt-prog/sim-cli",
+      "source": "https://github.com/ww123cqrt-prog/sim-cli/tree/main/plugins/comsol",
       "entry_points": {
         "sim.drivers": {
           "comsol": "sim_plugin_comsol:ComsolDriver"
@@ -65,7 +85,7 @@
       "solver": "flotherm",
       "package": "sim-plugin-flotherm",
       "version": "0.1.1",
-      "install_spec": "sim-plugin-flotherm @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/flotherm",
+      "install_spec": "sim-plugin-flotherm @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/flotherm",
       "path": "plugins/flotherm",
       "repository": "https://github.com/svd-ai-lab/sim-cli",
       "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/flotherm",
@@ -125,7 +145,7 @@
       "solver": "hypermesh",
       "package": "sim-plugin-hypermesh",
       "version": "0.2.0",
-      "install_spec": "sim-plugin-hypermesh @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/hypermesh",
+      "install_spec": "sim-plugin-hypermesh @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/hypermesh",
       "path": "plugins/hypermesh",
       "repository": "https://github.com/svd-ai-lab/sim-cli",
       "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hypermesh",
@@ -138,6 +158,27 @@
         },
         "sim.plugins": {
           "hypermesh": "sim_plugin_hypermesh:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "lumerical",
+      "package": "sim-plugin-lumerical",
+      "version": "0.1.0",
+      "install_spec": "sim-plugin-lumerical @ git+https://github.com/ww123cqrt-prog/sim-cli.git@main#subdirectory=plugins/lumerical",
+      "path": "plugins/lumerical",
+      "repository": "https://github.com/ww123cqrt-prog/sim-cli",
+      "source": "https://github.com/ww123cqrt-prog/sim-cli/tree/main/plugins/lumerical",
+      "entry_points": {
+        "sim.drivers": {
+          "lumerical-fdtd": "sim_plugin_lumerical:LumericalFDTDDriver",
+          "lumerical-rcwa": "sim_plugin_lumerical:LumericalRCWADriver"
+        },
+        "sim.skills": {
+          "lumerical-fdtd": "sim_plugin_lumerical:skills_dir"
+        },
+        "sim.plugins": {
+          "lumerical-fdtd": "sim_plugin_lumerical:plugin_info"
         }
       }
     },
@@ -165,7 +206,7 @@
       "solver": "spaceclaim",
       "package": "sim-plugin-spaceclaim",
       "version": "0.1.0",
-      "install_spec": "sim-plugin-spaceclaim @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/spaceclaim",
+      "install_spec": "sim-plugin-spaceclaim @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/spaceclaim",
       "path": "plugins/spaceclaim",
       "repository": "https://github.com/svd-ai-lab/sim-cli",
       "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/spaceclaim",
@@ -182,7 +223,7 @@
       "solver": "starccm",
       "package": "sim-plugin-starccm",
       "version": "0.1.0",
-      "install_spec": "sim-plugin-starccm @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/starccm",
+      "install_spec": "sim-plugin-starccm @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/starccm",
       "path": "plugins/starccm",
       "repository": "https://github.com/svd-ai-lab/sim-cli",
       "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/starccm",

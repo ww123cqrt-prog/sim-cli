@@ -24,7 +24,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "sim-cli-core>=0.3",
+    "sim-cli-core>=0.4.2,<0.5",
     "httpx>=0.24",
 ]
 
@@ -45,4 +45,12 @@ lumerical-fdtd = "sim_plugin_lumerical:skills_dir"
 lumerical-fdtd = "sim_plugin_lumerical:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/user/sim-plugin-lumerical"
+Homepage = "https://github.com/ww123cqrt-prog/sim-cli/tree/main/plugins/lumerical"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sim_plugin_lumerical"]
+
+[tool.sim]
+pypi = false
+repository = "https://github.com/ww123cqrt-prog/sim-cli"
+git-ref = "main"

@@ -18,7 +18,7 @@ def load(name):
 
 def test_index_preserves_package_entry_points():
     index = load("workspace").plugin_index()
-    assert len(index["plugins"]) == 11
+    assert len(index["plugins"]) == 13
     for plugin in index["plugins"]:
         assert plugin["package"] == "sim-plugin-" + plugin["solver"]
         assert "sim.skills" in plugin["entry_points"]

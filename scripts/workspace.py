@@ -25,17 +25,20 @@ def plugin_index():
         document = tomllib.loads((directory / "pyproject.toml").read_text(encoding="utf-8"))
         project = document["project"]
         path = directory.relative_to(ROOT).as_posix()
+        settings = document.get("tool", {}).get("sim", {})
+        repository = settings.get("repository", "https://github.com/svd-ai-lab/sim-cli")
+        ref = settings.get("git-ref", "main")
         install_spec = project["name"]
         if not document.get("tool", {}).get("sim", {}).get("pypi", True):
-            install_spec += " @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=" + path
+            install_spec += " @ git+" + repository + ".git@" + ref + "#subdirectory=" + path
         plugins.append({
             "solver": directory.name,
             "package": project["name"],
             "version": project["version"],
             "install_spec": install_spec,
             "path": path,
-            "repository": "https://github.com/svd-ai-lab/sim-cli",
-            "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/" + path,
+            "repository": repository,
+            "source": repository + "/tree/" + ref + "/" + path,
             "entry_points": project.get("entry-points", {}),
         })
     return {"schema_version": 1, "plugins": plugins}

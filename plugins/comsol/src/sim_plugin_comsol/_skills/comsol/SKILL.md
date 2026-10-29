@@ -5,6 +5,12 @@ description: "Use when the user asks Codex, Claude Code, ChatGPT-style coding ag
 
 # comsol-sim
 
+Before new modeling, solving, or substantive revision, consult the shared
+prior-experience index bundled with the core. Its installed location is
+`importlib.resources.files("sim").joinpath("_skills/sim-cli/references/prior-experience.md")`.
+This finds operator-owned case notes and current acceptance limits without
+copying private models into this plugin or requiring another checkout.
+
 This file is the **COMSOL Multiphysics** agent workflow index. Its job is to
 help an agent choose and execute the most reliable real COMSOL control path for
 the task: saved `.mph` inspection, local COMSOL documentation, direct COMSOL

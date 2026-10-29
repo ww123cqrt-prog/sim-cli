@@ -5,6 +5,12 @@ description: Drive an explicitly configured Lumerical FDTD or RCWA backend throu
 
 # Lumerical FDTD and RCWA
 
+Before new modeling, solving, or substantive revision, consult the shared
+prior-experience index bundled with the core. Its installed location is
+`importlib.resources.files("sim").joinpath("_skills/sim-cli/references/prior-experience.md")`.
+Read current case/research reviews and retained failure lessons; official
+rebuilds and independent research have separate identities and evidence limits.
+
 Resolve the requested solver host from the operator's private configuration.
 Use remote-windows-workstation for Windows identity and cached installation
 paths. Never substitute another machine's address or SDK path.

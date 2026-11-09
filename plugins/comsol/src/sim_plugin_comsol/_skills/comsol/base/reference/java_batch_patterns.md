@@ -54,6 +54,11 @@ model.save(r"C:\path\output.java")
 The output should be readable Java source starting with imports such as
 `com.comsol.model.*`, not a file with ZIP magic bytes (`PK`).
 
+For cross-version reconstruction and the MATLAB M-file alternative, read
+[native script version migration](native_script_version_migration.md). Preserve
+the source export, save the target model and verify it in a fresh process;
+compilation alone does not establish successful migration.
+
 ## Skeleton
 
 ```java

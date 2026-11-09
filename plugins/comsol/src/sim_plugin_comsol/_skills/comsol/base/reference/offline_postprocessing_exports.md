@@ -222,6 +222,12 @@ _result = {
 }
 ```
 
+For dense exports through a native `Table`, set its `tablebuffersize` before
+`setTableData` if the requested rows exceed its capacity, then check the actual
+exported shape. The [migration reference](native_script_version_migration.md)
+records a 65,536-to-10,000 row truncation. Recover the extraction from the saved
+solution; no repeated solve is needed.
+
 ## Offline Python readers
 
 Once the exports exist, postprocess them outside COMSOL:

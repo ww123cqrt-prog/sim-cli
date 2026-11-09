@@ -5,6 +5,26 @@ The goal is to make the agent behave like an engineer inspecting the
 current model state, not like a script generator hoping a large snippet
 works on the first try.
 
+## Client-server login initialization
+
+`No user name and password could be obtained` occurs before model execution.
+Compare the actual host, launcher, SDK and authentication state before calling
+it a package regression, license failure or model problem. Native Java batch,
+MATLAB LiveLink and a Python client need not use the same connection path.
+
+On a Windows COMSOL 6.4 host with no local login record, the plugin's silent
+launch failed with both the old and new plugin. Starting an owned local server
+with the standard `mph.Server` launcher initialized automatic login; subsequent
+unmodified plugin connections worked. This was observed with mph 1.3.1 and
+JPype 1.7.0/1.7.1; it is a host initialization result, not a universal SDK fix.
+
+If reproducing that diagnosis, use a new owned server and a free local port,
+read the active COMSOL version, and disconnect/close only that server. Verify
+the normal entrypoint again after initialization. Keep the initial failure
+and the before/after launch records. Do not print login files or ask the user
+to paste passwords into chat. If interactive initialization is needed, the
+user can enter credentials in the local COMSOL interface.
+
 ## Preferred inspect targets
 
 Run these after `uv run sim connect --solver comsol` and after every meaningful

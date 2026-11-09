@@ -29,6 +29,18 @@ For one-shot commands, a JSON request can name a remote-readable `script`.
 Files are not uploaded implicitly. Match the selected solver and verify all
 physical inputs and acceptance criteria before a real solve.
 
+## Custom material display colors
+
+When adding a custom material, also set its display color so different materials
+are easy to distinguish in the CAD view. Follow the user's palette when provided;
+otherwise choose contrasting colors and an appropriate opacity. Use
+`setmaterial(material_name, "color", [r; g; b; alpha])`, with RGBA values from
+0 to 1 (alpha 1 is opaque). Object-level opacity overrides can affect the display.
+Color is a rendering property; keep optical data and fit settings unchanged.
+See the [native setmaterial command](https://optics.ansys.com/hc/en-us/articles/360034409654-setmaterial-Script-command).
+
+## Result evidence
+
 Success requires result evidence appropriate to the task: an API connection,
 a saved project, and a converged solve are separate claims. Keep stdout,
 stderr, exit status, artifacts and any unverified steps distinct. Do not infer
